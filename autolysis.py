@@ -1,3 +1,7 @@
+import re
+import sys
+import subprocess
+
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
@@ -7,6 +11,61 @@
 #   "openai",
 # ]
 # ///
+
+def extract_metadata():
+    """Extract metadata from the script's comment block."""
+    metadata_pattern = re.compile(r"# ///.*?\n(.*?)\n# ///", re.DOTALL)
+    match = metadata_pattern.search(open(__file__).read())
+    if not match:
+        print("Error: Metadata block not found.")
+        sys.exit(1)
+    return match.group(1).strip()
+
+def parse_metadata(metadata):
+    """Parse the metadata block."""
+    python_version = None
+    dependencies = []
+    try:
+        lines = metadata.splitlines()
+        for line in lines:
+            if "requires-python" in line:
+                python_version = line.split("=")[1].strip().strip('"')
+            elif "dependencies" in line:
+                dependencies = eval(line.split("=")[1].strip())
+    except Exception as e:
+        print(f"Error parsing metadata: {e}")
+        sys.exit(1)
+    return python_version, dependencies
+
+def check_python_version(required_version):
+    """Ensure the current Python version meets the requirement."""
+    required_major, required_minor = map(int, required_version.split(".")[1:3])
+    if sys.version_info < (required_major, required_minor):
+        print(f"Error: Python {required_version} or higher is required.")
+        sys.exit(1)
+
+def install_dependencies(dependencies):
+    """Install dependencies listed in the metadata."""
+    for package in dependencies:
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing {package}: {e}")
+            sys.exit(1)
+
+# Main execution
+metadata = extract_metadata()
+python_version, dependencies = parse_metadata(metadata)
+
+# Check Python version
+if python_version:
+    check_python_version(python_version)
+
+# Install dependencies
+if dependencies:
+    install_dependencies(dependencies)
+
+
 import os
 import sys
 import subprocess
