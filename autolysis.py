@@ -23,12 +23,13 @@ def find_file_in_subdirectories(filename, start_dir="."):
             return os.path.join(root, filename)
     return None
 
-def install_requirements():
-    """Install libraries from requirements.txt."""
-    if os.path.exists("requirements.txt"):
-        print("Installing required libraries from 'requirements.txt'...")
+def install_requirements(start_dir="."):
+    """Install libraries from requirements.txt found in any subdirectory."""
+    requirements_file = find_file_in_subdirectories("requirements.txt", start_dir)
+    if requirements_file:
+        print(f"Found 'requirements.txt' at {requirements_file}. Installing required libraries...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
             print("Installation successful!")
         except subprocess.CalledProcessError as e:
             print(f"Error installing libraries: {e}")
