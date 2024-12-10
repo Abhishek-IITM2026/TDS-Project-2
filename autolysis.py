@@ -30,12 +30,22 @@ def install_requirements(start_dir="."):
         print(f"Found 'requirements.txt' at {requirements_file}. Installing required libraries...")
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
-            print("Installation successful!")
+            print("Python libraries installation successful!")
         except subprocess.CalledProcessError as e:
             print(f"Error installing libraries: {e}")
             sys.exit(1)
     else:
         print("No 'requirements.txt' file found.")
+
+def install_astral():
+    """Install Astral using the curl command."""
+    try:
+        print("Installing Astral tool using the curl command...")
+        subprocess.check_call(['curl', '-LsSf', 'https://astral.sh/uv/install.sh', '|', 'sh'])
+        print("Astral installation successful!")
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing Astral: {e}")
+        sys.exit(1)
 
 def load_dataset(file_path):
     try:
@@ -166,6 +176,9 @@ def write_readme(story, visuals, output_dir):
 def main():
     # Install required libraries from requirements.txt if the file exists
     install_requirements()
+
+    # Install Astral tool using curl
+    install_astral()
 
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
