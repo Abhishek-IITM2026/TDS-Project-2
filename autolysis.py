@@ -3,7 +3,6 @@
 # dependencies = [
 #   "httpx",
 #   "pandas",
-#   "matplotlib",
 #   "seaborn",
 #   "openai",
 # ]
@@ -12,7 +11,6 @@ import os
 import sys
 import subprocess
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 import openai
 import json
@@ -63,33 +61,25 @@ def generate_visualizations(data, output_dir):
     try:
         numeric_data = data.select_dtypes(include=["number"])
         if not numeric_data.empty:
-            # Generate correlation heatmap
-            plt.figure(figsize=(10, 8))
-            corr = numeric_data.corr()
-            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
-            plt.title("Correlation Heatmap")
+            # Generate correlation heatmap using seaborn
             heatmap_file = os.path.join(output_dir, "correlation_heatmap.png")
-            plt.savefig(heatmap_file)
-            plt.close()
+            sns.heatmap(numeric_data.corr(), annot=True, cmap="coolwarm", fmt=".2f")
+            sns.pyplot.savefig(heatmap_file)
+            sns.pyplot.close()
             visualizations.append(heatmap_file)
 
-            # Generate distribution plot for the first numeric column
-            first_col = numeric_data.columns[0]
-            plt.figure(figsize=(6, 4))
-            sns.histplot(numeric_data[first_col], kde=True)
-            plt.title(f"Distribution of {first_col}")
-            dist_file = os.path.join(output_dir, f"distribution_{first_col}.png")
-            plt.savefig(dist_file)
-            plt.close()
+            # Generate distribution plot for the first numeric column using seaborn
+            dist_file = os.path.join(output_dir, f"distribution_{numeric_data.columns[0]}.png")
+            sns.histplot(numeric_data.iloc[:, 0], kde=True)
+            sns.pyplot.savefig(dist_file)
+            sns.pyplot.close()
             visualizations.append(dist_file)
 
-            # Generate box plot for numeric data
-            plt.figure(figsize=(10, 6))
-            sns.boxplot(data=numeric_data, orient="h")
-            plt.title("Box Plot of Numeric Data")
+            # Generate box plot for numeric data using seaborn
             boxplot_file = os.path.join(output_dir, "boxplot_numeric_data.png")
-            plt.savefig(boxplot_file)
-            plt.close()
+            sns.boxplot(data=numeric_data, orient="h")
+            sns.pyplot.savefig(boxplot_file)
+            sns.pyplot.close()
             visualizations.append(boxplot_file)
         else:
             print("No numeric data available for visualizations.")
@@ -160,8 +150,6 @@ def write_readme(story, visuals, output_dir):
         print(f"Error writing README.md: {e}")
 
 def main():
-
-
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
