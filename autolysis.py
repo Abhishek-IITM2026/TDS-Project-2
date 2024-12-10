@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -21,6 +22,19 @@ def find_file_in_subdirectories(filename, start_dir="."):
         if filename in files:
             return os.path.join(root, filename)
     return None
+
+def install_requirements():
+    """Install libraries from requirements.txt."""
+    if os.path.exists("requirements.txt"):
+        print("Installing required libraries from 'requirements.txt'...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            print("Installation successful!")
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing libraries: {e}")
+            sys.exit(1)
+    else:
+        print("No 'requirements.txt' file found.")
 
 def load_dataset(file_path):
     try:
@@ -149,6 +163,9 @@ def write_readme(story, visuals, output_dir):
         print(f"Error writing README.md: {e}")
 
 def main():
+    # Install required libraries from requirements.txt if the file exists
+    install_requirements()
+
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
