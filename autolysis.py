@@ -3,6 +3,8 @@
 # dependencies = [
 #   "httpx",
 #   "pandas",
+#   "seaborn",
+#   "openai",
 # ]
 # ///
 import os
