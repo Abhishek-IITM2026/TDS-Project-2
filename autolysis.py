@@ -5,7 +5,7 @@
 #   "pandas",
 #   "matplotlib",
 #   "seaborn",
-#   "openai"
+#   "openai==0.28"
 # ]
 # ///
 import os
