@@ -1,4 +1,13 @@
-import os
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "httpx",
+#   "pandas",
+#   "matplotlib",
+#   "seaborn",
+#   "openai"
+# ]
+# ///import os
 import sys
 import subprocess
 import pandas as pd
@@ -22,22 +31,6 @@ def find_file_in_subdirectories(filename, start_dir="."):
         if filename in files:
             return os.path.join(root, filename)
     return None
-
-def install_requirements(start_dir="."):
-    """Install libraries from requirements.txt found in any subdirectory."""
-    requirements_file = find_file_in_subdirectories("requirements.txt", start_dir)
-    if requirements_file:
-        print(f"Found 'requirements.txt' at {requirements_file}. Installing required libraries...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
-            print("Python libraries installation successful!")
-        except subprocess.CalledProcessError as e:
-            print(f"Error installing libraries: {e}")
-            sys.exit(1)
-    else:
-        print("No 'requirements.txt' file found.")
-
-
 
 def load_dataset(file_path):
     try:
@@ -166,8 +159,7 @@ def write_readme(story, visuals, output_dir):
         print(f"Error writing README.md: {e}")
 
 def main():
-    # Install required libraries from requirements.txt if the file exists
-    install_requirements()
+
 
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
