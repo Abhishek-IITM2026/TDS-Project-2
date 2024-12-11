@@ -1,36 +1,28 @@
-import os
 import subprocess
 import sys
-import warnings
 
-# Suppress the specific warnings related to missing glyphs
-warnings.filterwarnings("ignore", message="Glyph.*missing from font.*")
-
-# Function to check and install required packages
-def install_package(package):
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip3", "install", package])
-    except subprocess.CalledProcessError:
-        print(f"Error installing package: {package}")
-        sys.exit(1)
-
-# List of required packages
-required_packages = [
-    'pandas', 
-    'matplotlib', 
-    'seaborn', 
-    'requests', 
-    'chardet'
-]
-
-# Install missing packages
-for package in required_packages:
+def install_and_import(package):
+    """
+    Install a package if it is not already installed, and then import it.
+    """
     try:
         __import__(package)
     except ImportError:
         print(f"Package {package} not found. Installing...")
-        install_package(package)
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        except subprocess.CalledProcessError:
+            print(f"Failed to install {package}. Exiting...")
+            sys.exit(1)
 
+# List of required packages
+required_packages = ["pandas", "matplotlib", "seaborn", "requests", "chardet"]
+
+# Install and import all required packages
+for package in required_packages:
+    install_and_import(package)
+
+import os
 import pandas as pd
 import seaborn as sns
 import openai
