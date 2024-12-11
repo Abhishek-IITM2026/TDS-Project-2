@@ -23,7 +23,7 @@ from pandas.plotting import scatter_matrix
 import numpy as np
 from scipy import stats
 
-
+# Check for the presence of the AIPROXY_TOKEN environment variable.
 if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
@@ -32,29 +32,30 @@ AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
+# Function to search for a file in the current directory or its subdirectories.
 def find_file_in_subdirectories(filename, start_dir="."):
     for root, _, files in os.walk(start_dir):
         if filename in files:
             return os.path.join(root, filename)
     return None
 
-#Load the dataset and handle encoding issues.
+# Load dataset with robust encoding handling.
 def load_dataset(file_path):
     try:
-        data = pd.read_csv(file_path)
+        data = pd.read_csv(file_path, encoding='utf-8')
     except UnicodeDecodeError:
-        print("Encoding issue. Converting to UTF-8...")
+        print("Encoding issue. Attempting conversion...")
         try:
             with open(file_path, "rb") as file:
                 raw_data = file.read().decode("latin1")  # Handle encoding issues
             data = pd.read_csv(StringIO(raw_data))
         except Exception as e:
-            print(f"Error in converting file to UTF-8: {e}")
+            print(f"Error while converting file encoding: {e}")
             sys.exit(1)
     print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
     return data
 
-#Perform advanced statistical analysis on the dataset.
+# Perform basic statistical analysis on the dataset.
 def basic_analysis(data):
     try:
         # Summary statistics for all columns
@@ -68,7 +69,7 @@ def basic_analysis(data):
         numeric_data = data.select_dtypes(include=["number"])
         correlation_matrix = numeric_data.corr()
 
-        # Outlier detection using IQR
+        # Outlier detection using IQR method
         outliers = {}
         for column in numeric_data.columns:
             Q1 = numeric_data[column].quantile(0.25)
@@ -83,7 +84,7 @@ def basic_analysis(data):
         category_analysis = {col: data[col].value_counts(normalize=True) * 100 
                              for col in categorical_data.columns}
 
-        # Prepare the analysis results
+        # Prepare and return the analysis results
         analysis_results = {
             "Summary Statistics": summary,
             "Missing Values": missing_values,
@@ -98,7 +99,7 @@ def basic_analysis(data):
         print(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
 
-#Generate visualizations to help with data interpretation.
+# Generate visualizations and save them as files.
 def generate_visualizations(data, output_dir):
     visualizations = []
     try:
@@ -171,7 +172,7 @@ def generate_visualizations(data, output_dir):
         print(f"Error in generating visualizations: {e}")
     return visualizations
 
-#Query OpenAI's LLM to generate an insightful report based on the analysis.
+# Query OpenAI for insights.
 def query_llm(prompt):
     try:
         response = openai.ChatCompletion.create(
@@ -191,7 +192,7 @@ def query_llm(prompt):
         print(f"Unexpected error: {e}")
     return None
 
-#Generate a detailed narrative for the dataset analysis.
+# Generate the narrative for the dataset.
 def narrate_story(data, summary, missing_values, visuals):
     try:
         columns_info = json.dumps({col: str(dtype) for col, dtype in data.dtypes.items()}, indent=2)
@@ -219,7 +220,7 @@ def narrate_story(data, summary, missing_values, visuals):
         print(f"Error in generating story: {e}")
         return None
 
-#Write the generated analysis and visualizations to a README file.
+# Write the analysis and visualizations to a README file.
 def write_readme(story, visuals, output_dir):
     try:
         readme_path = os.path.join(output_dir, "README.md")
@@ -233,7 +234,7 @@ def write_readme(story, visuals, output_dir):
     except Exception as e:
         print(f"Error writing README.md: {e}")
 
-#Main function to execute the analysis and generate the report.
+# Main function to execute the analysis and generate the report.
 def main():
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
@@ -260,4 +261,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
