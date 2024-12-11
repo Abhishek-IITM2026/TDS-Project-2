@@ -38,13 +38,22 @@ def find_file_in_subdirectories(filename, start_dir="."):
 
 def load_dataset(file_path):
     try:
-        with open(file_path, "rb") as f:
-            raw_data = f.read()
+        # Detect the encoding of the file
+        with open(file_path, "rb") as file:
+            raw_data = file.read()
             detected_encoding = chardet.detect(raw_data)['encoding']
+        
+        print(f"Detected file encoding: {detected_encoding}")
+        
+        # Load the dataset with the detected encoding
         data = pd.read_csv(file_path, encoding=detected_encoding)
+    except UnicodeDecodeError as e:
+        print(f"UnicodeDecodeError: {e}")
+        sys.exit(1)
     except Exception as e:
         print(f"Error loading dataset: {e}")
         sys.exit(1)
+    
     print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
     return data
 
