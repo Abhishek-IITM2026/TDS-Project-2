@@ -1,26 +1,16 @@
 import subprocess
 import sys
 
-def install_and_import(package):
-    """
-    Install a package if it is not already installed, and then import it.
-    """
-    try:
-        __import__(package)
-    except ImportError:
-        print(f"Package {package} not found. Installing...")
-        try:
-            subprocess.check_call([sys.executable, "-m", package])
-        except subprocess.CalledProcessError:
-            print(f"Failed to install {package}. Exiting...")
-            sys.exit(1)
-
-# List of required packages
-required_packages = ["pandas", "matplotlib", "seaborn", "requests", "chardet"]
-
-# Install and import all required packages
-for package in required_packages:
-    install_and_import(package)
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "httpx",
+#   "pandas",
+#   "matplotlib",
+#   "seaborn",
+#   "openai==0.28"
+# ]
+# ///
 
 import os
 import pandas as pd
