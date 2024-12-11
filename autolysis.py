@@ -1,13 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "seaborn",
-#   "openai==0.28",
-#   "scipy",
-# ]
-# ///
-import sys
-import os
 import pandas as pd
 import seaborn as sns
 import openai
@@ -171,7 +161,7 @@ def generate_visualizations(data, output_dir):
 def query_llm(prompt):
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
