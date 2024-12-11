@@ -94,6 +94,70 @@ def basic_analysis(data):
         logging.error(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
 
+def construct_dynamic_prompt(data, summary, missing_values, outliers, correlation_matrix, visuals):
+    """Construct a dynamic LLM prompt based on dataset characteristics."""
+    num_rows, num_cols = data.shape
+    missing_percentages = (missing_values / len(data)) * 100
+    high_missing_columns = missing_percentages[missing_percentages > 20].index.tolist()
+
+    # Detect high correlations
+    high_correlation_pairs = [
+        (i, j, correlation_matrix.loc[i, j])
+        for i in correlation_matrix.index
+        for j in correlation_matrix.columns
+        if i != j and abs(correlation_matrix.loc[i, j]) > 0.8
+    ]
+
+    # Summarize outliers
+    high_outlier_columns = [col for col, count in outliers.items() if count > 10]
+
+    prompt = (
+        f"The dataset contains {num_rows} rows and {num_cols} columns.\n\n"
+        f"### Missing Values\n"
+        f"Columns with more than 20% missing values: {', '.join(high_missing_columns) if high_missing_columns else 'None'}.\n\n"
+        f"### Correlation Insights\n"
+        f"There {'are' if high_correlation_pairs else 'are no'} highly correlated variable pairs.\n"
+    )
+    if high_correlation_pairs:
+        for pair in high_correlation_pairs[:5]:  # Limit to top 5 pairs for clarity
+            prompt += f"- {pair[0]} and {pair[1]}: correlation = {pair[2]:.2f}\n"
+
+    prompt += (
+        f"\n### Outliers\n"
+        f"Columns with significant outliers: {', '.join(high_outlier_columns) if high_outlier_columns else 'None'}.\n\n"
+        f"### Generated Visualizations\n"
+        f"{len(visuals)} visualizations were created, including a heatmap and boxplots.\n\n"
+        "Use this information to write a comprehensive analysis report highlighting insights, trends, and recommendations."
+    )
+    return prompt
+def agentic_workflow(data, summary, missing_values, outliers, correlation_matrix, visuals):
+    """Execute a multi-step interaction with the LLM."""
+    # Step 1: Generate a high-level summary
+    initial_prompt = construct_dynamic_prompt(data, summary, missing_values, outliers, correlation_matrix, visuals)
+    high_level_insights = query_llm(initial_prompt)
+    logging.info("Generated high-level insights.")
+
+    # Step 2: Focused analysis on missing values
+    if not missing_values.empty and missing_values.sum() > 0:
+        missing_prompt = (
+            f"Analyze the following missing value information in detail and suggest imputation strategies:\n"
+            f"{missing_values.to_string()}"
+        )
+        missing_analysis = query_llm(missing_prompt)
+        high_level_insights += f"\n\n### Missing Values Analysis\n{missing_analysis}"
+
+    # Step 3: Focused analysis on outliers
+    if outliers:
+        outlier_prompt = (
+            f"Analyze the detected outliers in the numeric columns. Suggest methods to handle them:\n"
+            f"{json.dumps(outliers, indent=2)}"
+        )
+        outlier_analysis = query_llm(outlier_prompt)
+        high_level_insights += f"\n\n### Outlier Analysis\n{outlier_analysis}"
+
+    # Combine all insights
+    return high_level_insights
+
 def generate_visualizations(data, output_dir):
     """Generate visualizations to help with data interpretation."""
     visualizations = []
@@ -209,24 +273,29 @@ def main():
         sys.exit(1)
 
     filename = sys.argv[1]
-    file_path = find_file_in_sub
-        file_path = find_file_in_subdirectories(filename)
-    if file_path is None:
-        logging.error(f"Error: File '{filename}' not found in the current directory or its subdirectories.")
+    file_path = find_file_in_subdirectories(filename)
+    if not file_path:
+        logging.error(f"File '{filename}' not found.")
         sys.exit(1)
 
-    logging.info(f"File found at: {file_path}")
-    output_dir = os.path.dirname(file_path)
+    # Load and analyze the dataset
     data = load_dataset(file_path)
-
     analysis_results = basic_analysis(data)
+    summary = analysis_results["Summary Statistics"]
+    missing_values = analysis_results["Missing Values"]
+    outliers = analysis_results["Outliers"]
+    correlation_matrix = analysis_results["Correlation Matrix"]
+
+    # Generate visualizations
+    output_dir = os.path.dirname(file_path)
     visuals = generate_visualizations(data, output_dir)
 
-    story = narrate_story(data, analysis_results["Summary Statistics"], analysis_results["Missing Values"], visuals)
-    if story:
-        write_readme(story, visuals, output_dir)
-    else:
-        logging.error("Error: Could not generate the analysis report.")
+    # Execute agentic workflow
+    final_insights = agentic_workflow(data, summary, missing_values, outliers, correlation_matrix, visuals)
+
+    # Write the analysis to a README
+    write_readme(final_insights, visuals, output_dir)
+
 
 if __name__ == "__main__":
     main()
