@@ -1,4 +1,10 @@
-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "seaborn",
+#   "openai==0.28"
+# ]
+# ///
 import sys
 import os
 import pandas as pd
