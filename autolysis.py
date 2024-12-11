@@ -1,14 +1,13 @@
-import subprocess
+#/// script
+#requires-python = ">=3.11"
+#dependencies = [
+#   "matplotlib",
+#   "seaborn",
+#   "openai==0.28",
+#   "scipy",
+#]
+#///
 import sys
-
-# Define dependencies
-dependencies = [
-    "matplotlib", "seaborn", "openai==0.28", "scipy"
-]
-
-# Install dependencies
-subprocess.check_call([sys.executable, "-m", "pip", "install"] + dependencies)
-
 import os
 import pandas as pd
 import seaborn as sns
