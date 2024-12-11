@@ -129,18 +129,16 @@ def generate_visualizations(data, output_dir):
         logging.error(f"Error in generating visualizations: {e}")
     return visualizations
 
-def query_llm(prompt):
-    """Query OpenAI's LLM to generate an insightful report based on the analysis."""
+def query_llm(prompt, max_tokens=1500):
+    """Query OpenAI's LLM to generate an insightful report with a focus on token efficiency."""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a highly skilled data scientist summarizing insights from datasets.",
-                },
+                {"role": "system", "content": "You are a highly skilled data scientist summarizing insights from datasets."},
                 {"role": "user", "content": prompt},
             ],
+            max_tokens=max_tokens  # Limit the tokens used in the response
         )
         return response["choices"][0]["message"]["content"]
     except openai.OpenAIError as e:
@@ -148,6 +146,7 @@ def query_llm(prompt):
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
     return None
+
 
 def narrate_story(data, summary, missing_values, visuals):
     """Generate a detailed narrative for the dataset analysis."""
