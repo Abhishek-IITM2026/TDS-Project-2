@@ -207,7 +207,6 @@ def main():
         logging.error("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
     filename = sys.argv[1]
-    file_path = find_file_in_sub
     file_path = find_file_in_subdirectories(filename)
     if file_path is None:
         logging.error(f"Error: File '{filename}' not found in the current directory or its subdirectories.")
