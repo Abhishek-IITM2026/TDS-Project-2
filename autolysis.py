@@ -10,7 +10,7 @@ def install_and_import(package):
     except ImportError:
         print(f"Package {package} not found. Installing...")
         try:
-            subprocess.check_call([sys.executable, "-m", "install", package])
+            subprocess.check_call([sys.executable, "-m", package])
         except subprocess.CalledProcessError:
             print(f"Failed to install {package}. Exiting...")
             sys.exit(1)
