@@ -1,12 +1,9 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "httpx",
-#   "pandas",
 #   "matplotlib",
 #   "seaborn",
 #   "openai==0.28",
-#   "chardet",
 #   "scipy",
 # ]
 # ///
