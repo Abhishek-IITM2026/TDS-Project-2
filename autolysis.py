@@ -6,7 +6,8 @@
 #   "matplotlib",
 #   "seaborn",
 #   "openai==0.28",
-#   "chardet"
+#   "chardet",
+#   "scipy",
 # ]
 # ///
 
