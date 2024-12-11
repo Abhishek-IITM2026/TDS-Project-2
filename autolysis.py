@@ -3,7 +3,7 @@ import sys
 
 # Define dependencies
 dependencies = [
-    "httpx", "pandas", "matplotlib", "seaborn", "openai==0.28", "chardet", "scipy"
+    "matplotlib", "seaborn", "openai==0.28", "scipy"
 ]
 
 # Install dependencies
