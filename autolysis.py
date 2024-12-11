@@ -8,7 +8,7 @@ import sys
 #   "pandas",
 #   "matplotlib",
 #   "seaborn",
-#   "openai==0.28"
+#   "openai==0.28",
 # ]
 # ///
 
