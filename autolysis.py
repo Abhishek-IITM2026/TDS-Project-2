@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "seaborn",
+#   "openai==0.28",
+#   "scipy",
+# ]
+# ///
 import pandas as pd
 import seaborn as sns
 import openai
