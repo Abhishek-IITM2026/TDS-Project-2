@@ -1,15 +1,17 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#   "uvicorn",
 #   "httpx",
 #   "pandas",
 #   "matplotlib",
 #   "seaborn",
-#   "openai==0.28"
+#   "openai==0.28",
+#   "chardet"
 # ]
 # ///
 
-import subprocess
+
 import sys
 import os
 import pandas as pd
@@ -17,6 +19,7 @@ import seaborn as sns
 import openai
 import json
 from io import StringIO
+import chardet
 
 if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
@@ -35,19 +38,16 @@ def find_file_in_subdirectories(filename, start_dir="."):
 
 def load_dataset(file_path):
     try:
-        data = pd.read_csv(file_path)
-    except UnicodeDecodeError:
-        print("Encoding issue. Converting to UTF-8...")
-        try:
-            # Read the file in binary mode and decode to UTF-8
-            with open(file_path, "rb") as file:
-                raw_data = file.read().decode("latin1")  # Replace with correct source encoding if known
-            data = pd.read_csv(StringIO(raw_data))
-        except Exception as e:
-            print(f"Error in converting file to UTF-8: {e}")
-            sys.exit(1)
+        with open(file_path, "rb") as f:
+            raw_data = f.read()
+            detected_encoding = chardet.detect(raw_data)['encoding']
+        data = pd.read_csv(file_path, encoding=detected_encoding)
+    except Exception as e:
+        print(f"Error loading dataset: {e}")
+        sys.exit(1)
     print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
     return data
+
 
 def basic_analysis(data):
     try:
