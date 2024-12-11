@@ -238,7 +238,7 @@ def main():
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
-        
+    file_path = sys.argv[1]   
     # Validate file path
     if not os.path.exists(file_path):
         print(f"Error: The file {file_path} does not exist.")
