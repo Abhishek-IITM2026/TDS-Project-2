@@ -3,7 +3,7 @@
 # dependencies = [
 #   "seaborn",
 #   "openai==0.28",
-#   "scipy"
+#   "scipy",
 # ]
 # ///
 import sys
