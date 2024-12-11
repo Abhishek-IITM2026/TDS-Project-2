@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore", message="Glyph.*missing from font.*")
 # Function to check and install required packages
 def install_package(package):
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        subprocess.check_call([sys.executable, "-m", "pip3", "install", package])
     except subprocess.CalledProcessError:
         print(f"Error installing package: {package}")
         sys.exit(1)
