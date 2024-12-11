@@ -23,7 +23,7 @@ from pandas.plotting import scatter_matrix
 import numpy as np
 from scipy import stats
 
-# Ensure that OpenAI API key is set correctly
+
 if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
@@ -33,14 +33,13 @@ openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
 def find_file_in_subdirectories(filename, start_dir="."):
-    """Recursively search for a file in the specified directory and subdirectories."""
     for root, _, files in os.walk(start_dir):
         if filename in files:
             return os.path.join(root, filename)
     return None
 
+#Load the dataset and handle encoding issues.
 def load_dataset(file_path):
-    """Load the dataset and handle encoding issues."""
     try:
         data = pd.read_csv(file_path)
     except UnicodeDecodeError:
@@ -55,8 +54,8 @@ def load_dataset(file_path):
     print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
     return data
 
+#Perform advanced statistical analysis on the dataset.
 def basic_analysis(data):
-    """Perform advanced statistical analysis on the dataset."""
     try:
         # Summary statistics for all columns
         summary = data.describe(include="all").transpose()
@@ -99,9 +98,8 @@ def basic_analysis(data):
         print(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
 
-
+#Generate visualizations to help with data interpretation.
 def generate_visualizations(data, output_dir):
-    """Generate visualizations to help with data interpretation."""
     visualizations = []
     try:
         numeric_data = data.select_dtypes(include=["number"])
@@ -173,8 +171,8 @@ def generate_visualizations(data, output_dir):
         print(f"Error in generating visualizations: {e}")
     return visualizations
 
+#Query OpenAI's LLM to generate an insightful report based on the analysis.
 def query_llm(prompt):
-    """Query OpenAI's LLM to generate an insightful report based on the analysis."""
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
@@ -193,8 +191,8 @@ def query_llm(prompt):
         print(f"Unexpected error: {e}")
     return None
 
+#Generate a detailed narrative for the dataset analysis.
 def narrate_story(data, summary, missing_values, visuals):
-    """Generate a detailed narrative for the dataset analysis."""
     try:
         columns_info = json.dumps({col: str(dtype) for col, dtype in data.dtypes.items()}, indent=2)
         summary_info = summary.to_string()
@@ -221,8 +219,8 @@ def narrate_story(data, summary, missing_values, visuals):
         print(f"Error in generating story: {e}")
         return None
 
+#Write the generated analysis and visualizations to a README file.
 def write_readme(story, visuals, output_dir):
-    """Write the generated analysis and visualizations to a README file."""
     try:
         readme_path = os.path.join(output_dir, "README.md")
         with open(readme_path, "w") as f:
@@ -235,8 +233,8 @@ def write_readme(story, visuals, output_dir):
     except Exception as e:
         print(f"Error writing README.md: {e}")
 
+#Main function to execute the analysis and generate the report.
 def main():
-    """Main function to execute the analysis and generate the report."""
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
