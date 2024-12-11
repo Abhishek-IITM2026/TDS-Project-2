@@ -3,8 +3,6 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "autolysis-analysis"
-version = "0.1.0"
 description = "A script for advanced dataset analysis"
 requires-python = ">=3.11"
 dependencies = [
