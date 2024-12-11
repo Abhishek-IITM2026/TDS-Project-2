@@ -1,12 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "matplotlib",
-#   "seaborn",
-#   "openai==0.28",
-#   "scipy",
-# ]
-# ///
 
 import sys
 import os
