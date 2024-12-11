@@ -259,6 +259,9 @@ def main():
         analysis_results["Correlation Matrix"],
     )
 
+    output_dir = os.path.join(os.path.dirname(file_path), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    
     # Generate visualizations
     visuals = generate_visualizations(data, output_dir)
 
