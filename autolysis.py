@@ -1,12 +1,16 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#   "httpx",
+#   "pandas",
 #   "matplotlib",
 #   "seaborn",
 #   "openai==0.28",
+#   "chardet",
 #   "scipy",
 # ]
 # ///
+
 import sys
 import os
 import pandas as pd
@@ -219,10 +223,7 @@ def narrate_story(data, summary, missing_values, visuals):
 # Write the analysis and visualizations to a README file.
 def write_readme(story, visuals, output_dir):
     try:
-        eval_dir = os.path.join(output_dir, "eval", dataset_name)
-        os.makedirs(eval_dir, exist_ok=True)  # Create directory if it doesn't exist
-        
-        readme_path = os.path.join(eval_dir, "README.md")
+        readme_path = os.path.join(output_dir, "README.md")
         with open(readme_path, "w") as f:
             f.write("# Analysis Report\n\n")
             f.write(story)
@@ -239,37 +240,24 @@ def main():
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
 
-    file_path = sys.argv[1]
-
-    # Validate file path
-    if not os.path.exists(file_path):
-        print(f"Error: The file {file_path} does not exist.")
+    filename = sys.argv[1]
+    file_path = find_file_in_subdirectories(filename)
+    if file_path is None:
+        print(f"Error: File '{filename}' not found in the current directory or its subdirectories.")
         sys.exit(1)
 
-    # Load dataset
+    print(f"File found at: {file_path}")
+    output_dir = os.path.dirname(file_path)
     data = load_dataset(file_path)
 
-    # Perform basic analysis
-    analysis_results = basic_analysis(data)
-    summary, missing_values, category_analysis, outliers, correlation_matrix = (
-        analysis_results["Summary Statistics"],
-        analysis_results["Missing Values"],
-        analysis_results["Category Analysis"],
-        analysis_results["Outliers"],
-        analysis_results["Correlation Matrix"],
-    )
-
-    output_dir = os.path.join(os.path.dirname(file_path), "output")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Generate visualizations
+    summary, missing_values = basic_analysis(data)
     visuals = generate_visualizations(data, output_dir)
 
-    # Generate story
     story = narrate_story(data, summary, missing_values, visuals)
-
     if story:
         write_readme(story, visuals, output_dir)
+    else:
+        print("Error: Could not generate the analysis report.")
 
 if __name__ == "__main__":
     main()
