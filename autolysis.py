@@ -1,5 +1,15 @@
-import os
+import subprocess
 import sys
+
+# Define dependencies
+dependencies = [
+    "httpx", "pandas", "matplotlib", "seaborn", "openai==0.28", "chardet", "scipy"
+]
+
+# Install dependencies
+subprocess.check_call([sys.executable, "-m", "pip", "install"] + dependencies)
+
+import os
 import pandas as pd
 import seaborn as sns
 import openai
