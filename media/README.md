@@ -1,6 +1,5 @@
 # Analysis Report
 
-```markdown
 # Analysis Report: Entertainment Dataset Insights
 
 ## Overview
@@ -13,7 +12,7 @@ The dataset showcases a diverse array of entertainment products with varying lev
 
 2. **Quality Ratings**: The average quality rating across all entries is approximately 3.21 (on a 1 to 5 scale), indicating a generally favorable view among viewers. Notably, the standard deviation of ratings (0.8) suggests a moderately diverse quality perception.
 
-3. **Repeatability**: Most content receives a repeatability score of 1, suggesting that many titles are not intended for repeated viewing or don’t succeed in engaging viewers beyond the initial experience.
+3. **Repeatability**: Most content receives a repeatability score of 1, suggesting that many titles are not intended for repeated viewing or donâ€™t succeed in engaging viewers beyond the initial experience.
 
 ## Trends or Patterns
 Several intriguing trends and patterns emerge from the data:
@@ -63,7 +62,7 @@ To extend the insights from this dataset, the following steps are recommended:
 5. **Benchmarking**: Compare this dataset with others within the entertainment sector to develop a more comprehensive understanding of trends across multiple datasets.
 
 By pursuing these avenues, further insights can be drawn to better understand audience preferences and inform strategic decisions in the entertainment industry.
-```
+
 
 
 ## Visualizations
