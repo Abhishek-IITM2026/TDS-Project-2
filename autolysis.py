@@ -56,14 +56,49 @@ def load_dataset(file_path):
     return data
 
 def basic_analysis(data):
-    """Perform basic statistical analysis on the dataset."""
+    """Perform advanced statistical analysis on the dataset."""
     try:
+        # Summary statistics for all columns
         summary = data.describe(include="all").transpose()
+
+        # Missing values analysis
         missing_values = data.isnull().sum()
-        return summary, missing_values
+        missing_percentage = (missing_values / len(data)) * 100
+
+        # Correlation matrix for numeric columns
+        numeric_data = data.select_dtypes(include=["number"])
+        correlation_matrix = numeric_data.corr()
+
+        # Outlier detection using IQR
+        outliers = {}
+        for column in numeric_data.columns:
+            Q1 = numeric_data[column].quantile(0.25)
+            Q3 = numeric_data[column].quantile(0.75)
+            IQR = Q3 - Q1
+            outlier_count = numeric_data[(numeric_data[column] < (Q1 - 1.5 * IQR)) | 
+                                         (numeric_data[column] > (Q3 + 1.5 * IQR))][column].count()
+            outliers[column] = outlier_count
+
+        # Categorical column analysis
+        categorical_data = data.select_dtypes(include=["object", "category"])
+        category_analysis = {col: data[col].value_counts(normalize=True) * 100 
+                             for col in categorical_data.columns}
+
+        # Prepare the analysis results
+        analysis_results = {
+            "Summary Statistics": summary,
+            "Missing Values": missing_values,
+            "Missing Percentage": missing_percentage,
+            "Correlation Matrix": correlation_matrix,
+            "Outliers": outliers,
+            "Category Analysis": category_analysis
+        }
+        
+        return analysis_results
     except Exception as e:
-        print(f"Error while performing basic analysis: {e}")
+        print(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
+
 
 def generate_visualizations(data, output_dir):
     """Generate visualizations to help with data interpretation."""
