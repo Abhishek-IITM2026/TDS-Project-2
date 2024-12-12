@@ -1,4 +1,16 @@
-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "matplotlib",
+#   "seaborn",
+#   "openai==0.28",
+#   "scipy",
+#   "bese64",
+#   "sklearn",
+#   "io",
+#   "PIL",
+# ]
+# ///
 import pandas as pd
 import numpy as np
 import seaborn as sns
