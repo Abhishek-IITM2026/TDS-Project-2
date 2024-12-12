@@ -115,10 +115,8 @@ summary_stats = data.describe(include="all").transpose()
 missing_values = data.isnull().sum()
 correlation_matrix = data.corr(numeric_only=True)
 
-# Determine the directory where README.md will be saved
-readme_dir = os.path.dirname("README.md")
-if not os.path.exists(readme_dir):
-    os.makedirs(readme_dir)
+# Ensure the directory exists for saving the README.md and PNG files (use current working directory)
+readme_dir = os.getcwd()
 
 # Visualization - Save correlation heatmap
 plt.figure(figsize=(10, 8))
