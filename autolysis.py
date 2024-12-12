@@ -29,12 +29,14 @@ from PIL import Image
 
 # Set the AIPROXY TOKEN and URL
 
-AIPROXY_TOKEN="eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDMxNTdAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.jqgA4t_kF3xuPBBPlGeLSKobS64VlLoTFSdh9MUMchQ"
-API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
-
-if not AIPROXY_TOKEN:
+if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
+
+AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
+openai.api_key = AIPROXY_TOKEN
+openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
+
 
 # Load the 'csv' file
 def load_data(file_path):
