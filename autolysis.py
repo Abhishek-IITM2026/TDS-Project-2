@@ -85,6 +85,13 @@ def load_dataset(file_path):
         sys.exit(1)
     return data
 
+# Function to find the file in subdirectories
+def find_file_in_subdirectories(filename):
+    for root, dirs, files in os.walk(os.getcwd()):
+        if filename in files:
+            return os.path.join(root, filename)
+    return None
+
 # Basic statistical analysis
 def basic_analysis(data):
     """
@@ -247,12 +254,17 @@ def main():
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
 
+    filename = sys.argv[1]
+    file_path = find_file_in_subdirectories(filename)
     if file_path is None:
         print(f"Error: File '{filename}' not found in the current directory or its subdirectories.")
         sys.exit(1)
 
     print(f"File found at: {file_path}")
     output_dir = os.path.dirname(file_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
     data = load_dataset(file_path)
 
     summary, missing_values = basic_analysis(data)
