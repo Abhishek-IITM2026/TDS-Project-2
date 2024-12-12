@@ -1,15 +1,35 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "matplotlib",
-#   "seaborn",
-#   "openai==0.28",
-#   "scipy",
-# ]
-# ///
-
-import sys
 import os
+import sys
+import subprocess
+
+# Function to install a Python package if not already installed
+def install_package(package_name, submodules=None):
+    """Installs a Python package if not already installed."""
+    try:
+        __import__(package_name)
+        if submodules:
+            for submodule in submodules:
+                __import__(f"{package_name}.{submodule}")
+    except ImportError:
+        print(f"Package {package_name} or submodule {submodules} not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+
+# Check and install dependencies
+required_packages = [
+    ("pandas", None),
+    ("seaborn", None),
+    ("matplotlib", None),
+    ("scikit-learn", None),
+    ("requests", None),
+    ("chardet", None),
+    ("joblib", ["externals.loky.backend.context"]),
+    ("warnings", None),
+    ("numpy", None)
+]
+for package, submodules in required_packages:
+    install_package(package, submodules)
+    
+
 import pandas as pd
 import seaborn as sns
 import openai
