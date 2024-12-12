@@ -2,7 +2,21 @@ import os
 import sys
 import subprocess
 
-# Function to install a Python package if not already installed
+
+def ensure_pip_installed():
+    """Ensure that pip is installed in the environment."""
+    try:
+        import pip  # Check if pip is available
+    except ImportError:
+        print("pip not found. Attempting to install pip...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+            print("pip successfully installed and upgraded.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install pip. Error: {e}")
+            sys.exit(1)
+
 def install_package(package_name, submodules=None):
     """Installs a Python package if not already installed."""
     try:
@@ -12,9 +26,17 @@ def install_package(package_name, submodules=None):
                 __import__(f"{package_name}.{submodule}")
     except ImportError:
         print(f"Package {package_name} or submodule {submodules} not found. Installing...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+            print(f"Successfully installed {package_name}.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install {package_name}. Error: {e}")
+            sys.exit(1)
 
-# Check and install dependencies
+# Ensure pip is available
+ensure_pip_installed()
+
+# Example usage
 required_packages = [
     ("pandas", None),
     ("seaborn", None),
@@ -22,12 +44,13 @@ required_packages = [
     ("scikit-learn", None),
     ("requests", None),
     ("chardet", None),
+    ("numpy", None),
     ("joblib", ["externals.loky.backend.context"]),
-    ("warnings", None),
-    ("numpy", None)
 ]
+
 for package, submodules in required_packages:
     install_package(package, submodules)
+
 
 # Validate and retrieve the AI Proxy Token
 try:
