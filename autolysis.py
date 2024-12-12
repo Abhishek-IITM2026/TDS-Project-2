@@ -29,12 +29,30 @@ AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
-# Function to search for a file in the current directory or its subdirectories.
-def find_file_in_subdirectories(filename, start_dir="."):
-    for root, _, files in os.walk(start_dir):
-        if filename in files:
-            return os.path.join(root, filename)
-    return None
+# Function to load a dataset while handling encoding issues
+def load_dataset(file_path):
+    """
+    Loads a dataset from the specified file path with robust error handling for encoding issues.
+    
+    Args:
+        file_path (str): The path to the CSV file.
+    
+    Returns:
+        pd.DataFrame: The loaded dataset as a DataFrame.
+    """
+    try:
+        data = pd.read_csv(file_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        print("Encoding issue. Attempting conversion...")
+        try:
+            with open(file_path, "rb") as file:
+                raw_data = file.read().decode("latin1")
+            data = pd.read_csv(StringIO(raw_data))
+        except Exception as e:
+            print(f"Error while converting file encoding: {e}")
+            sys.exit(1)
+    print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
+    return data
 
 # Load dataset with robust encoding handling.
 def load_dataset(file_path):
@@ -54,34 +72,42 @@ def load_dataset(file_path):
 
 # Perform basic statistical analysis on the dataset.
 def basic_analysis(data):
+    """
+    Conducts basic statistical analysis on the dataset.
+    
+    Includes:
+    - Summary statistics
+    - Missing value analysis
+    - Correlation matrix for numeric columns
+    - Outlier detection using the IQR method
+    - Categorical column analysis
+    
+    Args:
+        data (pd.DataFrame): The input dataset.
+    
+    Returns:
+        dict: A dictionary containing the results of the analysis.
+    """
     try:
-        # Summary statistics for all columns
         summary = data.describe(include="all").transpose()
-
-        # Missing values analysis
         missing_values = data.isnull().sum()
         missing_percentage = (missing_values / len(data)) * 100
-
-        # Correlation matrix for numeric columns
         numeric_data = data.select_dtypes(include=["number"])
         correlation_matrix = numeric_data.corr()
-
-        # Outlier detection using IQR method
         outliers = {}
+
         for column in numeric_data.columns:
             Q1 = numeric_data[column].quantile(0.25)
             Q3 = numeric_data[column].quantile(0.75)
             IQR = Q3 - Q1
-            outlier_count = numeric_data[(numeric_data[column] < (Q1 - 1.5 * IQR)) | 
+            outlier_count = numeric_data[(numeric_data[column] < (Q1 - 1.5 * IQR)) |
                                          (numeric_data[column] > (Q3 + 1.5 * IQR))][column].count()
             outliers[column] = outlier_count
 
-        # Categorical column analysis
         categorical_data = data.select_dtypes(include=["object", "category"])
         category_analysis = {col: data[col].value_counts(normalize=True) * 100 
                              for col in categorical_data.columns}
 
-        # Prepare and return the analysis results
         analysis_results = {
             "Summary Statistics": summary,
             "Missing Values": missing_values,
