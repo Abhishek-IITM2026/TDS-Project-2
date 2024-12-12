@@ -16,15 +16,9 @@ def install_package(package_name, submodules=None):
 
 # Check and install dependencies
 required_packages = [
-    ("pandas", None),
     ("seaborn", None),
     ("matplotlib", None),
-    ("scikit-learn", None),
-    ("requests", None),
     ("chardet", None),
-    ("joblib", ["externals.loky.backend.context"]),
-    ("warnings", None),
-    ("numpy", None),
     ("openai==0.28", None),
     ("scipy", None)
 ]
