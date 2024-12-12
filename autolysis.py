@@ -5,7 +5,7 @@
 #   "seaborn",
 #   "openai==0.28",
 #   "scipy",
-#   "bese64",
+#   "base64",
 #   "sklearn",
 #   "io",
 #   "PIL",
