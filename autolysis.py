@@ -5,6 +5,7 @@
 #   "seaborn",
 #   "openai==0.28",
 #   "scipy",
+#   "uvicorn",
 # ]
 # ///
 import sys
