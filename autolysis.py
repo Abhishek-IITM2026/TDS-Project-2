@@ -1,33 +1,29 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#   "httpx",
+#   "pandas",
 #   "matplotlib",
 #   "seaborn",
 #   "openai==0.28",
+#   "chardet",
 #   "scipy",
-#   "scikit-learn",
-#   "io",
-#   "PIL",
 # ]
 # ///
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import os
+
 import sys
-import httpx
-import chardet
-import time
-import base64
-from sklearn.cluster import KMeans, DBSCAN
-from scipy.cluster.hierarchy import dendrogram, linkage
-from sklearn.preprocessing import StandardScaler
-from io import BytesIO
-from PIL import Image
+import os
+import pandas as pd
+import seaborn as sns
+import openai
+import json
+from io import StringIO
+import matplotlib.pyplot as plt
+from pandas.plotting import scatter_matrix
+import numpy as np
+from scipy import stats
 
-# Set the AIPROXY TOKEN and URL
-
+# Check for the presence of the AIPROXY_TOKEN environment variable.
 if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
@@ -36,263 +32,232 @@ AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
+# Function to search for a file in the current directory or its subdirectories.
+def find_file_in_subdirectories(filename, start_dir="."):
+    for root, _, files in os.walk(start_dir):
+        if filename in files:
+            return os.path.join(root, filename)
+    return None
 
-# Load the 'csv' file
-def load_data(file_path):
+# Load dataset with robust encoding handling.
+def load_dataset(file_path):
     try:
-        with open(file_path, 'rb') as f:
-            result = chardet.detect(f.read())  # # Detect the encoding of a file that may have different or unknown character encodings from different sources or systems.
-        encoding = result['encoding']   # which encoding among these('utf-8', 'ISO-8859-1','Windows-1252')
-        data = pd.read_csv(file_path, encoding=encoding)   # prevent issues where characters from different languages or symbols may appear as garbage or unreadable text when reading the CSV file
-        return data
+        data = pd.read_csv(file_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        print("Encoding issue. Attempting conversion...")
+        try:
+            with open(file_path, "rb") as file:
+                raw_data = file.read().decode("latin1")  # Handle encoding issues
+            data = pd.read_csv(StringIO(raw_data))
+        except Exception as e:
+            print(f"Error while converting file encoding: {e}")
+            sys.exit(1)
+    print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
+    return data
+
+# Perform basic statistical analysis on the dataset.
+def basic_analysis(data):
+    try:
+        # Summary statistics for all columns
+        summary = data.describe(include="all").transpose()
+
+        # Missing values analysis
+        missing_values = data.isnull().sum()
+        missing_percentage = (missing_values / len(data)) * 100
+
+        # Correlation matrix for numeric columns
+        numeric_data = data.select_dtypes(include=["number"])
+        correlation_matrix = numeric_data.corr()
+
+        # Outlier detection using IQR method
+        outliers = {}
+        for column in numeric_data.columns:
+            Q1 = numeric_data[column].quantile(0.25)
+            Q3 = numeric_data[column].quantile(0.75)
+            IQR = Q3 - Q1
+            outlier_count = numeric_data[(numeric_data[column] < (Q1 - 1.5 * IQR)) | 
+                                         (numeric_data[column] > (Q3 + 1.5 * IQR))][column].count()
+            outliers[column] = outlier_count
+
+        # Categorical column analysis
+        categorical_data = data.select_dtypes(include=["object", "category"])
+        category_analysis = {col: data[col].value_counts(normalize=True) * 100 
+                             for col in categorical_data.columns}
+
+        # Prepare and return the analysis results
+        analysis_results = {
+            "Summary Statistics": summary,
+            "Missing Values": missing_values,
+            "Missing Percentage": missing_percentage,
+            "Correlation Matrix": correlation_matrix,
+            "Outliers": outliers,
+            "Category Analysis": category_analysis
+        }
+        
+        return analysis_results
     except Exception as e:
-        print(f"Error loading file {file_path}: {e}")
+        print(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
 
-# Perform basic analysis like summary stats, missing values, etc.
+# Generate visualizations and save them as files.
+def generate_visualizations(data, output_dir):
+    visualizations = []
+    try:
+        numeric_data = data.select_dtypes(include=["number"])
 
-def basic_analysis(data):
-    summary = data.describe(include='all').to_dict()   # compute summary statistics (like count, mean, standard deviation, min, max, etc.) for numerical columns.
-    missing_values = data.isnull().sum().to_dict()  # Missing values
-    column_info = data.dtypes.to_dict()  # Column types
-    return {"summary": summary, "missing_values": missing_values, "column_info": column_info}
+        if not numeric_data.empty:
+            # Correlation Heatmap
+            heatmap_file = os.path.join(output_dir, "correlation_heatmap.png")
+            plt.figure(figsize=(14, 12))
+            corr = numeric_data.corr()
+            mask = np.triu(np.ones_like(corr, dtype=bool))
+            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", mask=mask,
+                        linewidths=0.5, cbar_kws={'shrink': 0.8, 'label': 'Correlation Coefficient'},
+                        annot_kws={"size": 10, "weight": 'bold'})
+            plt.title("Correlation Heatmap", fontsize=18, weight='bold')
+            plt.tight_layout()
+            plt.savefig(heatmap_file)
+            plt.close()
+            visualizations.append(heatmap_file)
 
-# Robust outlier detection using IQR (Interquartile Range)
+            # Scatter Plot Matrix (if there are fewer than 10 numeric columns)
+            if numeric_data.shape[1] <= 10:  
+                scatter_matrix_file = os.path.join(output_dir, "scatter_matrix.png")
+                scatter_matrix(numeric_data, figsize=(16, 16), diagonal="hist", alpha=0.9)
+                plt.suptitle("Pairwise Relationships - Scatter Plot Matrix", fontsize=18, weight='bold')
+                plt.subplots_adjust(top=0.93)  
+                plt.tight_layout()
+                plt.savefig(scatter_matrix_file)
+                plt.close()
+                visualizations.append(scatter_matrix_file)
 
-def outlier_detection(data):
-    numeric_data = data.select_dtypes(include=np.number)  # returns columns with numeric data
-    Q1 = numeric_data.quantile(0.25)
-    Q3 = numeric_data.quantile(0.75)
-    IQR = Q3 - Q1           #Outliers is for identifying extreme values in your dataset that could be errors or just rare events.
-    outliers = ((numeric_data < (Q1 - 1.5 * IQR)) | (numeric_data > (Q3 + 1.5 * IQR))).sum().to_dict()
-    return {"outliers": outliers}
+            # Box Plot with Outlier Annotations
+            combined_boxplot_file = os.path.join(output_dir, "combined_boxplot.png")
+            plt.figure(figsize=(16, 8))
+            sns.boxplot(data=numeric_data, orient="h", palette="Set3", linewidth=2)
+            plt.title("Box Plot - All Numeric Columns", fontsize=18, weight='bold')
+            plt.xlabel("Values", fontsize=14)
+            plt.ylabel("Columns", fontsize=14)
+            plt.grid(True, axis='x', linestyle='--', alpha=0.6)
+            for col in numeric_data.columns:
+                outliers = numeric_data[col][(numeric_data[col] < numeric_data[col].quantile(0.25) - 1.5 * (numeric_data[col].quantile(0.75) - numeric_data[col].quantile(0.25))) | 
+                                             (numeric_data[col] > numeric_data[col].quantile(0.75) + 1.5 * (numeric_data[col].quantile(0.75) - numeric_data[col].quantile(0.25)))]
+                for outlier in outliers:
+                    plt.text(outlier, col, f'{outlier:.2f}', fontsize=10, ha='left', va='center', color='red')
+            plt.tight_layout()
+            plt.savefig(combined_boxplot_file)
+            plt.close()
+            visualizations.append(combined_boxplot_file)
 
-# Correlation Matrix
+        # Time Series Plots for Date Columns (with trend lines)
+        datetime_cols = data.select_dtypes(include=["datetime", "datetimetz"])
+        if not datetime_cols.empty:
+            for col in datetime_cols.columns:
+                time_series_file = os.path.join(output_dir, f"time_series_{col}.png")
+                plt.figure(figsize=(14, 7))
+                for num_col in numeric_data.columns:
+                    plt.plot(data[col], numeric_data[num_col], label=num_col, marker='o', markersize=5, linestyle='-', alpha=0.7)
+                    moving_avg = numeric_data[num_col].rolling(window=7).mean()
+                    plt.plot(data[col], moving_avg, label=f'{num_col} (Moving Average)', linestyle='--', linewidth=2)
+                plt.title(f"Time Series - {col}", fontsize=18, weight='bold')
+                plt.xlabel(col, fontsize=14)
+                plt.ylabel("Values", fontsize=14)
+                plt.legend(title="Variables", fontsize=12, loc='upper left')
+                plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.6)
+                plt.tight_layout()
+                plt.savefig(time_series_file)
+                plt.close()
+                visualizations.append(time_series_file)
+    except Exception as e:
+        print(f"Error in generating visualizations: {e}")
+    return visualizations
 
-def generate_correlation_matrix(data, output_dir):   # To find relationships between multiple variables
-    data = data.select_dtypes(include=[np.number])
-    corr = data.corr()
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(corr, annot=True, cmap="coolwarm")
-    plt.title("Correlation Matrix")
-    corr_path = os.path.join(output_dir, "correlation_matrix.png")
-    plt.savefig(corr_path)
-    plt.close()
-    return corr_path
+# Query OpenAI for insights.
+def query_llm(prompt):
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a highly skilled data scientist summarizing insights from datasets.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response["choices"][0]["message"]["content"]
+    except openai.OpenAIError as e:
+        print(f"OpenAI API error: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    return None
 
-    
-# DBSCAN clustering (Density-Based Clustering)
+# Generate the narrative for the dataset.
+def narrate_story(data, summary, missing_values, visuals):
+    try:
+        columns_info = json.dumps({col: str(dtype) for col, dtype in data.dtypes.items()}, indent=2)
+        summary_info = summary.to_string()
+        missing_info = missing_values.to_string()
+        visuals_info = "\n".join(visuals)
 
-def dbscan_clustering(data, output_dir):    # Identifying regions of high density
-    numeric_data = data.select_dtypes(include=np.number).dropna()
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(numeric_data)
-    dbscan = DBSCAN(eps=0.5, min_samples=5)
-    clusters = dbscan.fit_predict(scaled_data)
-    numeric_data['cluster'] = clusters
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=numeric_data.iloc[:, 0], y=numeric_data.iloc[:, 1], hue=numeric_data['cluster'], palette="viridis")
-    plt.title("DBSCAN Clustering")
-    dbscan_path = os.path.join(output_dir, "dbscan_clusters.png")
-    plt.savefig(dbscan_path)
-    print("dbscan_clusters.png created")
-    plt.close()
-    return dbscan_path
+        prompt = (
+            "You are a highly skilled data scientist tasked with creating a comprehensive analysis report for the dataset."
+            "Your goal is to present findings in a clear, engaging, and insightful manner. Use the information below to write a detailed README.md file."
+            "The report should include sections like overview, insights, trends, notable statistics, and potential applications.\n\n"
+            "Here is the context:\n\n"
+            f"### Dataset Information\n"
+            f"The dataset contains the following columns and data types:\n{columns_info}\n\n"
+            f"### Summary Statistics\n"
+            f"{summary_info}\n\n"
+            f"### Missing Values\n"
+            f"{missing_info}\n\n"
+            f"### Visualizations\n"
+            f"The following visualizations were generated:\n{visuals_info}\n\n"
+            "Conclude with recommendations for further analysis and actionable insights."
+        )
+        return query_llm(prompt)
+    except Exception as e:
+        print(f"Error in generating story: {e}")
+        return None
 
-# Hierarchical Clustering
+# Write the analysis and visualizations to a README file.
+def write_readme(story, visuals, output_dir):
+    try:
+        readme_path = os.path.join(output_dir, "README.md")
+        with open(readme_path, "w") as f:
+            f.write("# Analysis Report\n\n")
+            f.write(story)
+            f.write("\n\n## Visualizations\n")
+            for visual in visuals:
+                f.write(f"![{os.path.basename(visual)}]({os.path.basename(visual)})\n")
+        print(f"README.md saved in {output_dir}")
+    except Exception as e:
+        print(f"Error writing README.md: {e}")
 
-def hierarchical_clustering(data, output_dir):      #group similar data points together
-    
-    numeric_data = data.select_dtypes(include=np.number).dropna()
-    linked = linkage(numeric_data, 'ward')
-    plt.figure(figsize=(10, 7))
-    dendrogram(linked)
-    plt.title("Hierarchical Clustering Dendrogram")
-    hc_path = os.path.join(output_dir, "hierarchical_clustering.png")
-    plt.savefig(hc_path)
-    print("hierarchical_clustering.png created")
-    plt.close()
-    return hc_path
-
-# Function to convert image to Base64
-
-def image_to_base64(image_path, save_path):    # ensure the integrity of binary data during transmission,
-    with Image.open(image_path) as img:
-        target_width = 800
-        width, height = img.size
-        aspect_ratio = height / width
-        target_height = int(target_width * aspect_ratio)  # Maintain aspect ratio
-
-        # Resize the image using LANCZOS filter
-        resized_img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-
-        # Ensure the directory exists before saving the image
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        print("Save path created")
-
-        # Save the resized image to the given file path
-        resized_img.save(save_path, format="PNG")  # Save the image as PNG (or adjust format if needed)
-        print("Saved")
-
-        # Save the resized image to a BytesIO object (in-memory binary stream)
-        img_byte_arr = BytesIO()
-        resized_img.save(img_byte_arr, format="PNG")
-        
-        img_byte_arr.seek(0)  # Go to the start of the BytesIO buffer
-
-        # Encode the binary data to Base64
-        img_base64 = base64.b64encode(img_byte_arr.read()).decode('utf-8')
-        
-    return img_base64  # Return Base64-encoded image
-
-
-# Function to send the data info to the LLM and request analysis or code
-
-def query_llm_for_analysis(prompt):
-   
-
-    # Prepare the prompt to query the LLM
-    
-    headers = {"Authorization": f"Bearer {AIPROXY_TOKEN}"}
-    payload = {
-        "model": "gpt-4o-mini",  # or use the correct model
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1500,
-        "temperature": 0.7
-    }
-
-    retries = 10  # Increased retries before giving up
-    backoff_factor = 2  # Exponential backoff factor
-    max_wait_time = 60  # Maximum wait time (1 minute) to prevent indefinite retries
-
-    for attempt in range(retries):
-        try:
-            response = httpx.post(API_URL, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"].strip()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                # Exponential backoff with a cap on wait time
-                wait_time = min(backoff_factor ** attempt, max_wait_time)
-                print(f"Rate limit hit, retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-            else:
-                print(f"Error querying the LLM: {e}")
-                break
-        except httpx.RequestError as e:
-            print(f"Error querying the LLM: {e}")
-            break
-
-    print("Max retries reached, giving up.")
-    sys.exit(1)  # Exit after retries have failed
-
-# Save results in a Markdown README
-
-def save_readme(content, output_dir):
-    with open(os.path.join(output_dir, "README.md"), "w") as f:
-        f.write(content)
-        print("Readme saved")
-
-
-# Function to analyze and generate output for each file
-
-def analyze_and_generate_output(file_path):
-    base_name = os.path.splitext(os.path.basename(file_path))[0]
-    output_dir = os.path.join(".", base_name)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Load data
-    data = load_data(file_path)
-    print("Data loaded")
-    
-    # Perform basic analysis
-    analysis = basic_analysis(data)
-    outliers = outlier_detection(data)
-    combined_analysis = {**analysis, **outliers}
-
-    # Generate visualizations and save file paths
-    image_paths = {}
-    image_paths['correlation_matrix'] = generate_correlation_matrix(data, output_dir)
-    image_paths['dbscan_clusters'] = dbscan_clustering(data, output_dir)
-    image_paths['hierarchical_clustering'] = hierarchical_clustering(data, output_dir)
-    print("Images created:\n", image_paths)
-
-    
-    images_base64, filenames = process_images(image_paths, output_dir)
-
-    # Example output to verify
-    print("Base64 Encoded Images (Keys Only for Verification):")
-    print("keys:",list(images_base64.keys()))  # To show the keys, without the lengthy Base64 data
-
-    print("Resized Image Filenames for LLM Analysis:")
-    print("filenames after resize:",filenames)  # Send these filenames to LLM for analysis
-
-    # Send data to LLM for analysis and suggestions
-    data_info = {
-        "filename": file_path,
-        "summary": combined_analysis["summary"],
-        "missing_values": combined_analysis["missing_values"],
-        "outliers": combined_analysis["outliers"]
-    }
-    
-    prompt = (
-        "You are a creative storyteller. "
-        "Craft a compelling narrative based on this dataset analysis:\n\n"
-        f"Data Summary: {data_info['summary']}\n\n"
-        f"Missing Values: {data_info['missing_values']}\n\n"
-        f"Outlier Analysis: {data_info['outliers']}\n\n"
-        "Create a narrative covering these points:\n"
-        f"Correlation matrix:{filenames[0]},\n"
-        f"DBSCAN Clusters: {filenames[1]},\n"
-        f"Hierarchical Clustering: {filenames[2]}\n"
-    )
-    narrative = query_llm_for_analysis(prompt)
-   # print(f"\nLLM Narrative:\n{narrative}")
-
-    # Save the narrative to a README file
-    save_readme(narrative, output_dir)
-
-def resize_image(input_path, output_path, size=(300, 300)):   # reduce the size of the images 
-    """Resize an image to the specified size."""
-    with Image.open(input_path) as img:
-        img = img.resize(size)
-        img.save(output_path)
-    print(f"Image saved to {output_path}")
-
-def image_to_base64(image_path):
-    """Convert an image to a Base64 string."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
-
-def process_images(image_paths, output_dir, resize_size=(300, 300)):
-    """Resize images, convert to Base64"""
-    images_base64 = {}
-    filenames = []
-
-    for description, path in image_paths.items():
-        # Step 1: Resize the image
-        resized_image_path = os.path.join(output_dir, f"resized_{description}.png")
-        resize_image(path, resized_image_path, size=resize_size)
-        
-        # Step 2: Convert the resized image to Base64
-        base64_data = image_to_base64(resized_image_path)
-        images_base64[description] = base64_data
-        
-        # Step 3: Collect the filename (without the lengthy Base64 data)
-        filenames.append(resized_image_path)
-    
-    return images_base64, filenames
-
-
-
-# Main execution function
+# Main function to execute the analysis and generate the report.
 def main():
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
         sys.exit(1)
 
-    file_path = sys.argv[1]
-    analyze_and_generate_output(file_path)
+    filename = sys.argv[1]
+    file_path = find_file_in_subdirectories(filename)
+    if file_path is None:
+        print(f"Error: File '{filename}' not found in the current directory or its subdirectories.")
+        sys.exit(1)
+
+    print(f"File found at: {file_path}")
+    output_dir = os.path.dirname(file_path)
+    data = load_dataset(file_path)
+
+    summary, missing_values = basic_analysis(data)
+    visuals = generate_visualizations(data, output_dir)
+
+    story = narrate_story(data, summary, missing_values, visuals)
+    if story:
+        write_readme(story, visuals, output_dir)
+    else:
+        print("Error: Could not generate the analysis report.")
 
 if __name__ == "__main__":
     main()
