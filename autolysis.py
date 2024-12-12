@@ -5,7 +5,7 @@
 #   "seaborn",
 #   "openai==0.28",
 #   "scipy",
-#   "scikitlearn",
+#   "scikit-learn",
 #   "io",
 #   "PIL",
 # ]
