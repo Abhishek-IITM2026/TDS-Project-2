@@ -117,86 +117,69 @@ summary_stats = data.describe(include="all").transpose()
 missing_values = data.isnull().sum()
 correlation_matrix = data.corr(numeric_only=True)
 
-# Visualization - Save correlation heatmap
+## Visualization - Save correlation heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm")
 plt.title("Correlation Matrix")
 plt.tight_layout()
 correlation_plot = "correlation_matrix.png"
-plt.savefig(correlation_plot)
+try:
+    plt.savefig(correlation_plot)
+    print(f"Saved: {correlation_plot}")
+except Exception as e:
+    print(f"Failed to save {correlation_plot}: {e}")
 plt.close()
-
-# Impute missing values (replace NaNs with the mean of the column)
-imputer = SimpleImputer(strategy="mean")
-data_imputed = pd.DataFrame(imputer.fit_transform(data.select_dtypes(include=["float64", "int64"])))
-
-# Standardize the data
-scaler = StandardScaler()
-data_scaled = scaler.fit_transform(data_imputed)
-
-# PCA for dimensionality reduction
-pca = PCA(n_components=2)
-data_pca = pca.fit_transform(data_scaled)
-
-# Get feature names for PCA components
-features = data.select_dtypes(include=["float64", "int64"]).columns
 
 # PCA Scatter Plot
 plt.figure(figsize=(8, 6))
 plt.scatter(data_pca[:, 0], data_pca[:, 1], alpha=0.5, c="blue", label="Data Points")
 plt.title("PCA Scatter Plot")
-plt.xlabel(f"Principal Component 1 ({features[0]})")
-plt.ylabel(f"Principal Component 2 ({features[1]})")
+plt.xlabel(f"Principal Component 1")
+plt.ylabel(f"Principal Component 2")
 plt.legend()
 plt.tight_layout()
 pca_plot = "pca_scatter.png"
-plt.savefig(pca_plot)
+try:
+    plt.savefig(pca_plot)
+    print(f"Saved: {pca_plot}")
+except Exception as e:
+    print(f"Failed to save {pca_plot}: {e}")
 plt.close()
-
-# KMeans Clustering
-kmeans = KMeans(n_clusters=3, random_state=42)
-data["Cluster"] = kmeans.fit_predict(data_scaled)
 
 # KMeans Clustering Plot
 plt.figure(figsize=(8, 6))
 sns.scatterplot(x=data_pca[:, 0], y=data_pca[:, 1], hue=data["Cluster"], palette="viridis", legend="full")
 plt.title("KMeans Clustering")
-plt.xlabel(f"Principal Component 1 ({features[0]})")
-plt.ylabel(f"Principal Component 2 ({features[1]})")
+plt.xlabel(f"Principal Component 1")
+plt.ylabel(f"Principal Component 2")
 plt.legend(title="Clusters")
 plt.tight_layout()
 clustering_plot = "kmeans_clustering.png"
-plt.savefig(clustering_plot)
+try:
+    plt.savefig(clustering_plot)
+    print(f"Saved: {clustering_plot}")
+except Exception as e:
+    print(f"Failed to save {clustering_plot}: {e}")
 plt.close()
 
-# Outlier Detection
-distances = kmeans.transform(data_scaled).min(axis=1)
-threshold = distances.mean() + 3 * distances.std()
-outliers = distances > threshold
-
+# Outlier Detection Plot
 plt.figure(figsize=(8, 6))
-# Plot non-outliers
-plt.scatter(
-    np.where(~outliers)[0], distances[~outliers],
-    c='blue', label="Non-Outliers"
-)
-# Plot outliers
-plt.scatter(
-    np.where(outliers)[0], distances[outliers],
-    c='red', label="Outliers"
-)
-
-# Add the threshold line
+plt.scatter(np.where(~outliers)[0], distances[~outliers], c='blue', label="Non-Outliers")
+plt.scatter(np.where(outliers)[0], distances[outliers], c='red', label="Outliers")
 plt.axhline(y=threshold, color="green", linestyle="--", label="Threshold")
 plt.title("Outlier Detection")
 plt.xlabel("Data Point Index")
 plt.ylabel("Distance to Closest Cluster")
 plt.legend()
 plt.tight_layout()
-
 outliers_plot = "outliers.png"
-plt.savefig(outliers_plot)
+try:
+    plt.savefig(outliers_plot)
+    print(f"Saved: {outliers_plot}")
+except Exception as e:
+    print(f"Failed to save {outliers_plot}: {e}")
 plt.close()
+
 
 # Use AI Proxy for story generation
 import requests
