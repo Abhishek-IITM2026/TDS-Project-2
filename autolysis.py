@@ -20,17 +20,15 @@ from pandas.plotting import scatter_matrix
 import numpy as np
 from scipy import stats
 
-# Ensure the AIPROXY_TOKEN environment variable is set, or exit the program.
+# Check for the presence of the AIPROXY_TOKEN environment variable.
 if "AIPROXY_TOKEN" not in os.environ:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
 
-# Initialize OpenAI API key and endpoint
 AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
-# Function to locate a file in the current directory or its subdirectories
 def find_file_in_subdirectories(filename, start_dir="."):
     """
     Recursively searches for a file in the given directory and its subdirectories.
@@ -72,7 +70,7 @@ def load_dataset(file_path):
     print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
     return data
 
-# Function to perform basic statistical analysis on the dataset
+# Perform basic statistical analysis on the dataset.
 def basic_analysis(data):
     """
     Conducts basic statistical analysis on the dataset.
@@ -126,40 +124,9 @@ def basic_analysis(data):
 
 # Generate visualizations and save them as files.
 def generate_visualizations(data, output_dir):
-    """
-    Creates visualizations for numeric data in the dataset and saves them as files.
-    
-    Includes:
-    - Correlation heatmap
-    - Scatter plot matrix
-    - Boxplot with outlier annotations
-    
-    Args:
-        data (pd.DataFrame): The input dataset.
-        output_dir (str): Directory to save the visualizations.
-    
-    Returns:
-        list: Paths to the saved visualization files.
-    """
     visualizations = []
     try:
         numeric_data = data.select_dtypes(include=["number"])
-
-        if not numeric_data.empty:
-            # Generate heatmap
-            heatmap_file = os.path.join(output_dir, "correlation_heatmap.png")
-            plt.figure(figsize=(14, 12))
-            corr = numeric_data.corr()
-            mask = np.triu(np.ones_like(corr, dtype=bool))
-            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", mask=mask,
-                        linewidths=0.5, cbar_kws={'shrink': 0.8, 'label': 'Correlation Coefficient'},
-                        annot_kws={"size": 10, "weight": 'bold'})
-            plt.title("Correlation Heatmap", fontsize=18, weight='bold')
-            plt.tight_layout()
-            plt.savefig(heatmap_file)
-            plt.close()
-            visualizations.append(heatmap_file)
-
 
         if not numeric_data.empty:
             # Correlation Heatmap
