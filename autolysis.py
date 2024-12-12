@@ -29,6 +29,22 @@ AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 openai.api_key = AIPROXY_TOKEN
 openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
+def find_file_in_subdirectories(filename, start_dir="."):
+    """
+    Recursively searches for a file in the given directory and its subdirectories.
+    
+    Args:
+        filename (str): The name of the file to search for.
+        start_dir (str): The directory to start the search from.
+    
+    Returns:
+        str or None: The full path of the file if found, otherwise None.
+    """
+    for root, _, files in os.walk(start_dir):
+        if filename in files:
+            return os.path.join(root, filename)
+    return None
+
 # Function to load a dataset while handling encoding issues
 def load_dataset(file_path):
     """
@@ -47,22 +63,6 @@ def load_dataset(file_path):
         try:
             with open(file_path, "rb") as file:
                 raw_data = file.read().decode("latin1")
-            data = pd.read_csv(StringIO(raw_data))
-        except Exception as e:
-            print(f"Error while converting file encoding: {e}")
-            sys.exit(1)
-    print(f"Dataset loaded with {data.shape[0]} rows and {data.shape[1]} columns.")
-    return data
-
-# Load dataset with robust encoding handling.
-def load_dataset(file_path):
-    try:
-        data = pd.read_csv(file_path, encoding='utf-8')
-    except UnicodeDecodeError:
-        print("Encoding issue. Attempting conversion...")
-        try:
-            with open(file_path, "rb") as file:
-                raw_data = file.read().decode("latin1")  # Handle encoding issues
             data = pd.read_csv(StringIO(raw_data))
         except Exception as e:
             print(f"Error while converting file encoding: {e}")
