@@ -116,7 +116,24 @@ except Exception as e:
 summary_stats = data.describe(include="all").transpose()
 missing_values = data.isnull().sum()
 correlation_matrix = data.corr(numeric_only=True)
+# Ensure StandardScaler and PCA are used for dimensionality reduction
+scaler = StandardScaler()
 
+# Scaling the data before applying PCA
+scaled_data = scaler.fit_transform(data.select_dtypes(include=[np.number]))
+
+# PCA (Principal Component Analysis)
+pca = PCA(n_components=2)
+data_pca = pca.fit_transform(scaled_data)
+
+# KMeans Clustering
+kmeans = KMeans(n_clusters=3, random_state=42)  # Adjust the number of clusters if needed
+data["Cluster"] = kmeans.fit_predict(data_pca)
+
+# Outlier Detection (using distances to the nearest cluster center)
+distances = np.linalg.norm(data_pca - kmeans.cluster_centers_[data["Cluster"]], axis=1)
+threshold = np.percentile(distances, 95)  # Define outliers as those with distances above the 95th percentile
+outliers = distances > threshold
 ## Visualization - Save correlation heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm")
