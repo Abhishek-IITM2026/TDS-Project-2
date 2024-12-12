@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 
-
 def ensure_pip_installed():
     """Ensure that pip is installed in the environment."""
     try:
@@ -50,7 +49,6 @@ required_packages = [
 
 for package, submodules in required_packages:
     install_package(package, submodules)
-
 
 # Validate and retrieve the AI Proxy Token
 try:
@@ -117,14 +115,20 @@ summary_stats = data.describe(include="all").transpose()
 missing_values = data.isnull().sum()
 correlation_matrix = data.corr(numeric_only=True)
 
+# Determine the directory where README.md will be saved
+readme_dir = os.path.dirname("README.md")
+if not os.path.exists(readme_dir):
+    os.makedirs(readme_dir)
+
 # Visualization - Save correlation heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm")
 plt.title("Correlation Matrix")
 plt.tight_layout()
-correlation_plot = "correlation_matrix.png"
+correlation_plot = os.path.join(readme_dir, "correlation_matrix.png")
 plt.savefig(correlation_plot)
 plt.close()
+print(f"Saved correlation heatmap as {correlation_plot}")
 
 # Impute missing values (replace NaNs with the mean of the column)
 imputer = SimpleImputer(strategy="mean")
@@ -149,9 +153,10 @@ plt.xlabel(f"Principal Component 1 ({features[0]})")
 plt.ylabel(f"Principal Component 2 ({features[1]})")
 plt.legend()
 plt.tight_layout()
-pca_plot = "pca_scatter.png"
+pca_plot = os.path.join(readme_dir, "pca_scatter.png")
 plt.savefig(pca_plot)
 plt.close()
+print(f"Saved PCA scatter plot as {pca_plot}")
 
 # KMeans Clustering
 kmeans = KMeans(n_clusters=3, random_state=42)
@@ -165,9 +170,10 @@ plt.xlabel(f"Principal Component 1 ({features[0]})")
 plt.ylabel(f"Principal Component 2 ({features[1]})")
 plt.legend(title="Clusters")
 plt.tight_layout()
-clustering_plot = "kmeans_clustering.png"
+clustering_plot = os.path.join(readme_dir, "kmeans_clustering.png")
 plt.savefig(clustering_plot)
 plt.close()
+print(f"Saved KMeans clustering plot as {clustering_plot}")
 
 # Outlier Detection
 distances = kmeans.transform(data_scaled).min(axis=1)
@@ -194,9 +200,10 @@ plt.ylabel("Distance to Closest Cluster")
 plt.legend()
 plt.tight_layout()
 
-outliers_plot = "outliers.png"
+outliers_plot = os.path.join(readme_dir, "outliers.png")
 plt.savefig(outliers_plot)
 plt.close()
+print(f"Saved outliers plot as {outliers_plot}")
 
 # Use AI Proxy for story generation
 import requests
@@ -244,7 +251,7 @@ charts = {
 # Generate and save the story
 story = generate_story(analysis_summary, charts)
 
-with open("README.md", "w", encoding="utf-8") as f:
+with open(os.path.join(readme_dir, "README.md"), "w", encoding="utf-8") as f:
     f.write("# Analysis Report\n\n")
     f.write("## Data Analysis and Insights\n")
     f.write(story)
