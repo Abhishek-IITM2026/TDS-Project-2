@@ -1,6 +1,21 @@
 import os
 import sys
 import subprocess
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import json
+import numpy as np
+import chardet
+import openai
+from io import StringIO
+from scipy import stats
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.impute import SimpleImputer
+from joblib.externals.loky.backend.context import set_start_method
+import requests
 
 # Function to install a Python package if not already installed
 def install_package(package_name, submodules=None):
@@ -16,74 +31,31 @@ def install_package(package_name, submodules=None):
 
 # Check and install dependencies
 required_packages = [
+    ("pandas", None),
     ("seaborn", None),
     ("matplotlib", None),
     ("scikit-learn", None),
     ("requests", None),
+    ("chardet", None),
     ("joblib", ["externals.loky.backend.context"]),
     ("warnings", None),
     ("numpy", None)
-    ("chardet", None),
-    ("openai==0.28", None),
-    ("scipy", None)
 ]
 for package, submodules in required_packages:
     install_package(package, submodules)
-    
 
-import pandas as pd
-import seaborn as sns
-import openai
-import json
-from io import StringIO
-import matplotlib.pyplot as plt
-from pandas.plotting import scatter_matrix
-import numpy as np
-from scipy import stats
-
-# Check for the presence of the AIPROXY_TOKEN environment variable.
-if "AIPROXY_TOKEN" not in os.environ:
-    print("Error: AIPROXY_TOKEN environment variable is not set.")
-    sys.exit(1)
-
-AIPROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
-openai.api_key = AIPROXY_TOKEN
-openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
-
-for package, submodules in required_packages:
-    install_package(package, submodules)
-
-# Validate and retrieve the AI Proxy Token
+# Set up environment and validate dependencies
 try:
     AI_PROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
 except KeyError:
     print("Error: AIPROXY_TOKEN environment variable is not set.")
     sys.exit(1)
 
-# Validate command-line arguments
-if len(sys.argv) != 2:
-    print("Usage: uv run autolysis.py <csv_file>")
-    sys.exit(1)
-
-csv_file = sys.argv[1]
-if not os.path.exists(csv_file):
-    print(f"Error: File '{csv_file}' does not exist.")
-    sys.exit(1)
-
-# Import dependencies after ensuring they are installed
-import warnings
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-from sklearn.impute import SimpleImputer
-from joblib.externals.loky.backend.context import set_start_method
-import chardet
-import numpy as np
+openai.api_key = AI_PROXY_TOKEN
+openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
 
 # Suppress specific warnings
+import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="joblib")
 warnings.filterwarnings("ignore", category=Warning, module="subprocess")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="joblib")
@@ -93,9 +65,6 @@ set_start_method("loky", force=True)
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", message=".*subprocess.*", category=Warning)
 
-# Additional suppression of subprocess warnings globally
-os.environ["PYTHONWARNINGS"] = "ignore"
-
 # Function to detect encoding
 def detect_encoding(file_path):
     with open(file_path, 'rb') as f:
@@ -103,159 +72,61 @@ def detect_encoding(file_path):
     result = chardet.detect(raw_data)
     return result['encoding']
 
-# Detect the encoding of the CSV file
-encoding = detect_encoding(csv_file)
-
-# Load the dataset using the detected encoding
-try:
-    data = pd.read_csv(csv_file, encoding=encoding)
-except Exception as e:
-    print(f"Error loading CSV file: {e}")
-    sys.exit(1)
-
-# Generic analysis
-summary_stats = data.describe(include="all").transpose()
-missing_values = data.isnull().sum()
-correlation_matrix = data.corr(numeric_only=True)
-
-# Visualization - Save correlation heatmap
-plt.figure(figsize=(10, 8))
-sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm")
-plt.title("Correlation Matrix")
-plt.tight_layout()
-correlation_plot = "correlation_matrix.png"
-plt.savefig(correlation_plot)
-plt.close()
-
-# Impute missing values (replace NaNs with the mean of the column)
-imputer = SimpleImputer(strategy="mean")
-data_imputed = pd.DataFrame(imputer.fit_transform(data.select_dtypes(include=["float64", "int64"])))
-
-# Standardize the data
-scaler = StandardScaler()
-data_scaled = scaler.fit_transform(data_imputed)
-
-# PCA for dimensionality reduction
-pca = PCA(n_components=2)
-data_pca = pca.fit_transform(data_scaled)
-
-# Get feature names for PCA components
-features = data.select_dtypes(include=["float64", "int64"]).columns
-
-# PCA Scatter Plot
-plt.figure(figsize=(8, 6))
-plt.scatter(data_pca[:, 0], data_pca[:, 1], alpha=0.5, c="blue", label="Data Points")
-plt.title("PCA Scatter Plot")
-plt.xlabel(f"Principal Component 1 ({features[0]})")
-plt.ylabel(f"Principal Component 2 ({features[1]})")
-plt.legend()
-plt.tight_layout()
-pca_plot = "pca_scatter.png"
-plt.savefig(pca_plot)
-plt.close()
-
-# KMeans Clustering
-kmeans = KMeans(n_clusters=3, random_state=42)
-data["Cluster"] = kmeans.fit_predict(data_scaled)
-
-# KMeans Clustering Plot
-plt.figure(figsize=(8, 6))
-sns.scatterplot(x=data_pca[:, 0], y=data_pca[:, 1], hue=data["Cluster"], palette="viridis", legend="full")
-plt.title("KMeans Clustering")
-plt.xlabel(f"Principal Component 1 ({features[0]})")
-plt.ylabel(f"Principal Component 2 ({features[1]})")
-plt.legend(title="Clusters")
-plt.tight_layout()
-clustering_plot = "kmeans_clustering.png"
-plt.savefig(clustering_plot)
-plt.close()
-
-# Outlier Detection
-distances = kmeans.transform(data_scaled).min(axis=1)
-threshold = distances.mean() + 3 * distances.std()
-outliers = distances > threshold
-
-plt.figure(figsize=(8, 6))
-# Plot non-outliers
-plt.scatter(
-    np.where(~outliers)[0], distances[~outliers],
-    c='blue', label="Non-Outliers"
-)
-# Plot outliers
-plt.scatter(
-    np.where(outliers)[0], distances[outliers],
-    c='red', label="Outliers"
-)
-
-# Add the threshold line
-plt.axhline(y=threshold, color="green", linestyle="--", label="Threshold")
-plt.title("Outlier Detection")
-plt.xlabel("Data Point Index")
-plt.ylabel("Distance to Closest Cluster")
-plt.legend()
-plt.tight_layout()
-
-outliers_plot = "outliers.png"
-plt.savefig(outliers_plot)
-plt.close()
-
-# Use AI Proxy for story generation
-import requests
-
-def generate_story(analysis_summary, charts):
-    prompt = f"""
-    Analyze the data and narrate a story:
-    - Dataset summary: {analysis_summary}
-    - Generated charts: {charts}
-    - Provide insights into:
-      1. What the data reveals
-      2. The analysis performed
-      3. Key findings and implications
-      4. Conclusion
+# Function to load a dataset
+def load_dataset(file_path):
     """
-    headers = {
-        "Authorization": f"Bearer {AI_PROXY_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1500
-    }
-    response = requests.post("https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", json=data, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        print(f"Error communicating with AI Proxy: {response.status_code} - {response.text}")
+    Loads a dataset from the specified file path with robust error handling for encoding issues.
+    """
+    encoding = detect_encoding(file_path)
+    try:
+        data = pd.read_csv(file_path, encoding=encoding)
+    except Exception as e:
+        print(f"Error loading CSV file: {e}")
+        sys.exit(1)
+    return data
+
+# Basic statistical analysis
+def basic_analysis(data):
+    """
+    Perform basic statistical analysis and return results.
+    """
+    try:
+        summary = data.describe(include="all").transpose()
+        missing_values = data.isnull().sum()
+        missing_percentage = (missing_values / len(data)) * 100
+        numeric_data = data.select_dtypes(include=["number"])
+        correlation_matrix = numeric_data.corr()
+        outliers = {}
+
+        for column in numeric_data.columns:
+            Q1 = numeric_data[column].quantile(0.25)
+            Q3 = numeric_data[column].quantile(0.75)
+            IQR = Q3 - Q1
+            outlier_count = numeric_data[(numeric_data[column] < (Q1 - 1.5 * IQR)) |
+                                         (numeric_data[column] > (Q3 + 1.5 * IQR))][column].count()
+            outliers[column] = outlier_count
+
+        categorical_data = data.select_dtypes(include=["object", "category"])
+        category_analysis = {col: data[col].value_counts(normalize=True) * 100 
+                             for col in categorical_data.columns}
+
+        return {
+            "Summary Statistics": summary,
+            "Missing Values": missing_values,
+            "Missing Percentage": missing_percentage,
+            "Correlation Matrix": correlation_matrix,
+            "Outliers": outliers,
+            "Category Analysis": category_analysis
+        }
+    except Exception as e:
+        print(f"Error while performing advanced analysis: {e}")
         sys.exit(1)
 
-# Prepare inputs for story generation
-analysis_summary = {
-    "Summary Statistics": summary_stats.to_dict(),
-    "Missing Values": missing_values.to_dict()
-}
-charts = {
-    "Correlation Heatmap": correlation_plot,
-    "PCA Scatter Plot": pca_plot,
-    "KMeans Clustering": clustering_plot,
-    "Outliers Plot": outliers_plot
-}
-
-# Generate and save the story
-story = generate_story(analysis_summary, charts)
-
-with open("README.md", "w", encoding="utf-8") as f:
-    f.write("# Analysis Report\n\n")
-    f.write("## Data Analysis and Insights\n")
-    f.write(story)
-    f.write("\n\n### Generated Visualizations\n")
-    for chart_name, chart_file in charts.items():
-        f.write(f"- [{chart_name}]({chart_file})\n")
-
-print("Analysis complete. Story saved to README.md.")
-# Generate visualizations and save them as files.
+# Generate visualizations
 def generate_visualizations(data, output_dir):
+    """
+    Generate visualizations for the dataset.
+    """
     visualizations = []
     try:
         numeric_data = data.select_dtypes(include=["number"])
@@ -275,70 +146,55 @@ def generate_visualizations(data, output_dir):
             plt.close()
             visualizations.append(heatmap_file)
 
-            # Scatter Plot Matrix (if there are fewer than 10 numeric columns)
-            if numeric_data.shape[1] <= 10:  
-                scatter_matrix_file = os.path.join(output_dir, "scatter_matrix.png")
-                scatter_matrix(numeric_data, figsize=(16, 16), diagonal="hist", alpha=0.9)
-                plt.suptitle("Pairwise Relationships - Scatter Plot Matrix", fontsize=18, weight='bold')
-                plt.subplots_adjust(top=0.93)  
-                plt.tight_layout()
-                plt.savefig(scatter_matrix_file)
-                plt.close()
-                visualizations.append(scatter_matrix_file)
+            # PCA for dimensionality reduction
+            pca = PCA(n_components=2)
+            data_scaled = StandardScaler().fit_transform(data.select_dtypes(include=["float64", "int64"]))
+            pca_components = pca.fit_transform(data_scaled)
 
-            # Box Plot with Outlier Annotations
-            combined_boxplot_file = os.path.join(output_dir, "combined_boxplot.png")
-            plt.figure(figsize=(16, 8))
-            sns.boxplot(data=numeric_data, orient="h", palette="Set3", linewidth=2)
-            plt.title("Box Plot - All Numeric Columns", fontsize=18, weight='bold')
-            plt.xlabel("Values", fontsize=14)
-            plt.ylabel("Columns", fontsize=14)
-            plt.grid(True, axis='x', linestyle='--', alpha=0.6)
-            for col in numeric_data.columns:
-                outliers = numeric_data[col][(numeric_data[col] < numeric_data[col].quantile(0.25) - 1.5 * (numeric_data[col].quantile(0.75) - numeric_data[col].quantile(0.25))) | 
-                                             (numeric_data[col] > numeric_data[col].quantile(0.75) + 1.5 * (numeric_data[col].quantile(0.75) - numeric_data[col].quantile(0.25)))]
-                for outlier in outliers:
-                    plt.text(outlier, col, f'{outlier:.2f}', fontsize=10, ha='left', va='center', color='red')
+            pca_plot = os.path.join(output_dir, "pca_scatter.png")
+            plt.scatter(pca_components[:, 0], pca_components[:, 1], alpha=0.5, c="blue")
+            plt.title("PCA Scatter Plot")
+            plt.xlabel("Principal Component 1")
+            plt.ylabel("Principal Component 2")
             plt.tight_layout()
-            plt.savefig(combined_boxplot_file)
+            plt.savefig(pca_plot)
             plt.close()
-            visualizations.append(combined_boxplot_file)
+            visualizations.append(pca_plot)
 
-        # Time Series Plots for Date Columns (with trend lines)
-        datetime_cols = data.select_dtypes(include=["datetime", "datetimetz"])
-        if not datetime_cols.empty:
-            for col in datetime_cols.columns:
-                time_series_file = os.path.join(output_dir, f"time_series_{col}.png")
-                plt.figure(figsize=(14, 7))
-                for num_col in numeric_data.columns:
-                    plt.plot(data[col], numeric_data[num_col], label=num_col, marker='o', markersize=5, linestyle='-', alpha=0.7)
-                    moving_avg = numeric_data[num_col].rolling(window=7).mean()
-                    plt.plot(data[col], moving_avg, label=f'{num_col} (Moving Average)', linestyle='--', linewidth=2)
-                plt.title(f"Time Series - {col}", fontsize=18, weight='bold')
-                plt.xlabel(col, fontsize=14)
-                plt.ylabel("Values", fontsize=14)
-                plt.legend(title="Variables", fontsize=12, loc='upper left')
-                plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.6)
-                plt.tight_layout()
-                plt.savefig(time_series_file)
-                plt.close()
-                visualizations.append(time_series_file)
+            # KMeans Clustering
+            kmeans = KMeans(n_clusters=3, random_state=42)
+            clusters = kmeans.fit_predict(data_scaled)
+            data["Cluster"] = clusters
+            clustering_plot = os.path.join(output_dir, "kmeans_clustering.png")
+            sns.scatterplot(x=pca_components[:, 0], y=pca_components[:, 1], hue=data["Cluster"], palette="viridis")
+            plt.title("KMeans Clustering")
+            plt.tight_layout()
+            plt.savefig(clustering_plot)
+            plt.close()
+            visualizations.append(clustering_plot)
+
+        # Box plot
+        boxplot_file = os.path.join(output_dir, "boxplot.png")
+        sns.boxplot(data=numeric_data)
+        plt.title("Boxplot of Numeric Columns")
+        plt.tight_layout()
+        plt.savefig(boxplot_file)
+        plt.close()
+        visualizations.append(boxplot_file)
+
     except Exception as e:
         print(f"Error in generating visualizations: {e}")
     return visualizations
 
-# Query OpenAI for insights.
+# Query OpenAI for insights
 def query_llm(prompt):
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a highly skilled data scientist summarizing insights from datasets.",
-                },
+                {"role": "system", "content": "You are a highly skilled data scientist summarizing insights from datasets."},
                 {"role": "user", "content": prompt},
-            ],
+            ]
         )
         return response["choices"][0]["message"]["content"]
     except openai.OpenAIError as e:
@@ -347,35 +203,31 @@ def query_llm(prompt):
         print(f"Unexpected error: {e}")
     return None
 
-# Generate the narrative for the dataset.
+# Generate the narrative for the dataset
 def narrate_story(data, summary, missing_values, visuals):
-    try:
-        columns_info = json.dumps({col: str(dtype) for col, dtype in data.dtypes.items()}, indent=2)
-        summary_info = summary.to_string()
-        missing_info = missing_values.to_string()
-        visuals_info = "\n".join(visuals)
+    columns_info = json.dumps({col: str(dtype) for col, dtype in data.dtypes.items()}, indent=2)
+    summary_info = summary.to_string()
+    missing_info = missing_values.to_string()
+    visuals_info = "\n".join(visuals)
 
-        prompt = (
-            "You are a highly skilled data scientist tasked with creating a comprehensive analysis report for the dataset."
-            "Your goal is to present findings in a clear, engaging, and insightful manner. Use the information below to write a detailed README.md file."
-            "The report should include sections like overview, insights, trends, notable statistics, and potential applications.\n\n"
-            "Here is the context:\n\n"
-            f"### Dataset Information\n"
-            f"The dataset contains the following columns and data types:\n{columns_info}\n\n"
-            f"### Summary Statistics\n"
-            f"{summary_info}\n\n"
-            f"### Missing Values\n"
-            f"{missing_info}\n\n"
-            f"### Visualizations\n"
-            f"The following visualizations were generated:\n{visuals_info}\n\n"
-            "Conclude with recommendations for further analysis and actionable insights."
-        )
-        return query_llm(prompt)
-    except Exception as e:
-        print(f"Error in generating story: {e}")
-        return None
+    prompt = (
+        "You are a highly skilled data scientist tasked with creating a comprehensive analysis report for the dataset."
+        "Your goal is to present findings in a clear, engaging, and insightful manner. Use the information below to write a detailed README.md file."
+        "The report should include sections like overview, insights, trends, notable statistics, and potential applications.\n\n"
+        "Here is the context:\n\n"
+        f"### Dataset Information\n"
+        f"The dataset contains the following columns and data types:\n{columns_info}\n\n"
+        f"### Summary Statistics\n"
+        f"{summary_info}\n\n"
+        f"### Missing Values\n"
+        f"{missing_info}\n\n"
+        f"### Visualizations\n"
+        f"The following visualizations were generated:\n{visuals_info}\n\n"
+        "Conclude with recommendations for further analysis and actionable insights."
+    )
+    return query_llm(prompt)
 
-# Write the analysis and visualizations to a README file.
+# Write the analysis and visualizations to a README file
 def write_readme(story, visuals, output_dir):
     try:
         readme_path = os.path.join(output_dir, "README.md")
@@ -389,7 +241,7 @@ def write_readme(story, visuals, output_dir):
     except Exception as e:
         print(f"Error writing README.md: {e}")
 
-# Main function to execute the analysis and generate the report.
+# Main function to execute the analysis and generate the report
 def main():
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <dataset.csv>")
