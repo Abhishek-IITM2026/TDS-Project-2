@@ -24,7 +24,9 @@ required_packages = [
     ("chardet", None),
     ("joblib", ["externals.loky.backend.context"]),
     ("warnings", None),
-    ("numpy", None)
+    ("numpy", None),
+    ("openai==0.28", None),
+    ("scipy", None)
 ]
 for package, submodules in required_packages:
     install_package(package, submodules)
