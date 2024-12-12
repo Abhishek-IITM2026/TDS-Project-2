@@ -254,7 +254,17 @@ def narrate_story(data, summary, missing_values, visuals):
 # Write the analysis and visualizations to a README file.
 def write_readme(story, visuals, output_dir):
     try:
-        readme_path = os.path.join(output_dir, "README.md")
+        csv_name = os.path.splitext(os.path.basename(input_file_path))[0]
+        
+        # Determine the eval subdirectory path
+        root_parent_dir = os.path.abspath(os.path.join(os.path.dirname(input_file_path), "../.."))
+        eval_dir = os.path.join(root_parent_dir, "eval", csv_name)
+
+        # Create the eval subdirectory if it doesn't exist
+        os.makedirs(eval_dir, exist_ok=True)
+
+        # Define the path for the README.md file
+        readme_path = os.path.join(eval_dir, "README.md")
         with open(readme_path, "w") as f:
             f.write("# Analysis Report\n\n")
             f.write(story)
