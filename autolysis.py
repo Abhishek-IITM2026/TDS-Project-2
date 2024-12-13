@@ -72,9 +72,6 @@ warnings.filterwarnings("ignore", message=".*subprocess.*", category=Warning)
 # Additional suppression of subprocess warnings globally
 os.environ["PYTHONWARNINGS"] = "ignore"
 
-# Get the current working directory
-current_dir = os.getcwd()
-
 # Function to detect encoding
 def detect_encoding(file_path):
     with open(file_path, 'rb') as f:
@@ -98,11 +95,11 @@ missing_values = data.isnull().sum()
 correlation_matrix = data.corr(numeric_only=True)
 
 # Visualization - Save correlation heatmap
-correlation_plot = os.path.join(current_dir, "correlation_matrix.png")
 plt.figure(figsize=(10, 8))
 sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm")
 plt.title("Correlation Matrix")
 plt.tight_layout()
+correlation_plot = "correlation_matrix.png"
 plt.savefig(correlation_plot)
 plt.close()
 
@@ -122,7 +119,6 @@ data_pca = pca.fit_transform(data_scaled)
 features = data.select_dtypes(include=["float64", "int64"]).columns
 
 # PCA Scatter Plot
-pca_plot = os.path.join(current_dir, "pca_scatter.png")
 plt.figure(figsize=(8, 6))
 plt.scatter(data_pca[:, 0], data_pca[:, 1], alpha=0.5, c="blue", label="Data Points")
 plt.title("PCA Scatter Plot")
@@ -130,6 +126,7 @@ plt.xlabel(f"Principal Component 1 ({features[0]})")
 plt.ylabel(f"Principal Component 2 ({features[1]})")
 plt.legend()
 plt.tight_layout()
+pca_plot = "pca_scatter.png"
 plt.savefig(pca_plot)
 plt.close()
 
@@ -138,7 +135,6 @@ kmeans = KMeans(n_clusters=3, random_state=42)
 data["Cluster"] = kmeans.fit_predict(data_scaled)
 
 # KMeans Clustering Plot
-clustering_plot = os.path.join(current_dir, "kmeans_clustering.png")
 plt.figure(figsize=(8, 6))
 sns.scatterplot(x=data_pca[:, 0], y=data_pca[:, 1], hue=data["Cluster"], palette="viridis", legend="full")
 plt.title("KMeans Clustering")
@@ -146,6 +142,7 @@ plt.xlabel(f"Principal Component 1 ({features[0]})")
 plt.ylabel(f"Principal Component 2 ({features[1]})")
 plt.legend(title="Clusters")
 plt.tight_layout()
+clustering_plot = "kmeans_clustering.png"
 plt.savefig(clustering_plot)
 plt.close()
 
@@ -154,7 +151,6 @@ distances = kmeans.transform(data_scaled).min(axis=1)
 threshold = distances.mean() + 3 * distances.std()
 outliers = distances > threshold
 
-outliers_plot = os.path.join(current_dir, "outliers.png")
 plt.figure(figsize=(8, 6))
 # Plot non-outliers
 plt.scatter(
@@ -174,6 +170,8 @@ plt.xlabel("Data Point Index")
 plt.ylabel("Distance to Closest Cluster")
 plt.legend()
 plt.tight_layout()
+
+outliers_plot = "outliers.png"
 plt.savefig(outliers_plot)
 plt.close()
 
@@ -199,7 +197,7 @@ def generate_story(analysis_summary, charts):
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1500,
-        "temperature": 0.1,
+        "temperature": 0.0,
         "top_p": 1.0
     }
     response = requests.post("https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", json=data, headers=headers)
@@ -225,8 +223,7 @@ charts = {
 # Generate and save the story
 story = generate_story(analysis_summary, charts)
 
-readme_file = os.path.join(current_dir, "README.md")
-with open(readme_file, "w", encoding="utf-8") as f:
+with open("README.md", "w", encoding="utf-8") as f:
     f.write("# Analysis Report\n\n")
     f.write("## Data Analysis and Insights\n")
     f.write(story)
@@ -234,4 +231,4 @@ with open(readme_file, "w", encoding="utf-8") as f:
     for chart_name, chart_file in charts.items():
         f.write(f"- [{chart_name}]({chart_file})\n")
 
-print(f"Analysis complete. Story saved to {readme_file}.")
+print("Analysis complete. Story saved to README.md.")
