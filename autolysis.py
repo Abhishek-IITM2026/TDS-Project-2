@@ -199,8 +199,8 @@ def generate_story(analysis_summary, charts):
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1500,
-        "temperature": 0.2,
-        "top_p": 0.9
+        "temperature": 0.1,
+        "top_p": 1.0
     }
     response = requests.post("https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", json=data, headers=headers)
     
