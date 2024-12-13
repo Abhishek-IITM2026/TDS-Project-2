@@ -180,41 +180,15 @@ import requests
 
 def generate_story(analysis_summary, charts):
     prompt = f"""
-    You are a data scientist tasked with generating a **consistent and structured analysis report**. 
-    Follow this strict format and ensure clarity, conciseness, and relevance.
-
-    **Sections:**
-    1. **Overview of the Dataset**:
-       - Describe the dataset: structure, size, and purpose.
-       - Mention the key variables and any unique characteristics.
-    2. **Key Insights from Analysis**:
-       - Highlight notable findings: trends, correlations, and patterns.
-       - Summarize missing values and imputed data, and their implications.
-    3. **Visualizations**:
-       - For each chart, explain its purpose and insights:
-         - **Correlation Heatmap**: {charts['Correlation Heatmap']}
-         - **PCA Scatter Plot**: {charts['PCA Scatter Plot']}
-         - **KMeans Clustering**: {charts['KMeans Clustering']}
-         - **Outliers Plot**: {charts['Outliers Plot']}
-    4. **Recommendations**:
-       - Suggest actionable steps based on the findings.
-       - Highlight how the insights can inform decision-making or further analysis.
-    5. **Conclusion**:
-       - Provide a concise summary of the main takeaways.
-       - Outline potential next steps for deeper exploration or practical application.
-
-    **Dataset Summary:**
-    {analysis_summary}
-
-    **Guidelines:**
-    - Use bullet points where appropriate.
-    - Limit each section to a maximum of 200 words.
-    - Avoid repeating information unnecessarily.
-    - Use clear, business-friendly language suitable for non-technical readers.
-
-    Create the report strictly adhering to these instructions.
+    Analyze the data and narrate a story:
+    - Dataset summary: {analysis_summary}
+    - Generated charts: {charts}
+    - Provide insights into:
+      1. What the data reveals
+      2. The analysis performed
+      3. Key findings and implications
+      4. Conclusion
     """
-
     headers = {
         "Authorization": f"Bearer {AI_PROXY_TOKEN}",
         "Content-Type": "application/json"
@@ -227,14 +201,12 @@ def generate_story(analysis_summary, charts):
         "top_p": 0.9
     }
     response = requests.post("https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", json=data, headers=headers)
-
+    
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"]
     else:
         print(f"Error communicating with AI Proxy: {response.status_code} - {response.text}")
         sys.exit(1)
-
-
 
 # Prepare inputs for story generation
 analysis_summary = {
