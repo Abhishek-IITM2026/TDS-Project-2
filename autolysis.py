@@ -2,6 +2,12 @@ import os
 import sys
 import subprocess
 
+import time
+
+# Record the start time
+start_time = time.time()
+
+
 def ensure_pip():
     """Ensures pip is installed."""
     try:
@@ -247,3 +253,10 @@ with open(readme_path, "w", encoding="utf-8") as f:
         f.write(f"- [{chart_name}]({chart_file})\n")
 
 print("Analysis complete. Story saved to README.md.")
+# Record the end time
+end_time = time.time()
+
+# Calculate and display the elapsed time
+elapsed_time = end_time - start_time
+print(f"Script executed in {elapsed_time:.2f} seconds.")
+
