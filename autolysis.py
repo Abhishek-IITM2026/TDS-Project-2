@@ -2,6 +2,19 @@ import os
 import sys
 import subprocess
 
+def ensure_pip():
+    """Ensures pip is installed."""
+    try:
+        import pip  # Check if pip is already available
+    except ImportError:
+        print("pip not found. Installing pip...")
+        subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+        print("pip installed successfully.")
+
+# Call ensure_pip at the start of your script
+ensure_pip()
+
 # Function to install a Python package if not already installed
 def install_package(package_name, submodules=None):
     """Installs a Python package if not already installed."""
