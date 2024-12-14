@@ -1,276 +1,527 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "chardet",
+#     "matplotlib",
+#     "numpy",
+#     "openai",
+#     "pandas",
+#     "python-dotenv",
+#     "requests",
+#     "scikit-learn",
+#     "seaborn",
+# ]
+# ///
 import os
-import sys
-import subprocess
-
-# Function to install Python packages if not already installed
-def install_package(package_name, submodules=None):
-    """Installs a Python package if not already installed."""
-    try:
-        __import__(package_name)
-        if submodules:
-            for submodule in submodules:
-                __import__(f"{package_name}.{submodule}")
-    except ImportError:
-        print(f"Installing package: {package_name}...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-
-# Install required libraries
-required_packages = [
-    ("pandas", None),
-    ("seaborn", None),
-    ("matplotlib", None),
-    ("scikit-learn", None),
-    ("requests", None),
-    ("chardet", None),
-    ("numpy", None),
-    ("joblib", ["externals.loky.backend.context"]),
-    ("folium", None),
-    ("plotly", None),
-    ("Pillow", None),
-    ("geopy", None),
-]
-
-for package, submodules in required_packages:
-    install_package(package, submodules)
-
-# Validate and retrieve the AI Proxy Token
-try:
-    AI_PROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
-except KeyError:
-    print("Error: AIPROXY_TOKEN environment variable is not set.")
-    sys.exit(1)
-
-# Validate command-line arguments
-if len(sys.argv) != 2:
-    print("Usage: python autolysis.py <csv_file>")
-    sys.exit(1)
-
-csv_file = sys.argv[1]
-if not os.path.exists(csv_file):
-    print(f"Error: File '{csv_file}' does not exist.")
-    sys.exit(1)
-
-# Import dependencies
-import warnings
 import pandas as pd
+import numpy as np
+import sys as sys
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+import openai
+import requests
+import chardet
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
-from joblib.externals.loky.backend.context import set_start_method
-import chardet
-import numpy as np
-import folium
-from folium.plugins import MarkerCluster
-from geopy.geocoders import Nominatim
-from PIL import Image
-import requests
-import plotly.express as px
+from dotenv import load_dotenv
+import base64
+import re
 
-# Suppress warnings
-warnings.filterwarnings("ignore")
-set_start_method("loky", force=True)
 
-# Function to detect file encoding
-def detect_encoding(file_path):
+load_dotenv()
+
+"""# Read csv file and put the data into pandas DataFrame"""
+
+def read_csv(file_path):
+  """
+  Function:
+    Reads a CSV file.
+  Args:
+    file_path: Path to the CSV file.
+  Returns:
+    A dataframe having data from csv file.
+  """
+  print(file_path)
+  try:
+    # Get the encoding of the file
     with open(file_path, 'rb') as f:
-        raw_data = f.read()
-    return chardet.detect(raw_data)['encoding']
+      result = chardet.detect(f.read())
+      encoding = result['encoding']
+      print(encoding)
+    # Read the CSV file into a pandas DataFrame
+    df = pd.read_csv(file_path, encoding=encoding, encoding_errors='ignore')
+    print(df.head())
+    return df
+  except FileNotFoundError:
+    print(f"Error: File not found at path: {file_path}")
+    return None
+  except pd.errors.ParserError:
+    print(f"Error: Could not parse the CSV file. Check its format.")
+    return None
+  except Exception as e:
+    print(f"An unexpected error occurred: {e}")
+    return None
 
-# Function to compress and save plot
-def save_compressed_plot(fig, filename, quality=70):
-    # Save the figure without using 'optimize' argument
-    fig.savefig(filename, dpi=150, bbox_inches='tight', format="png")
-    img = Image.open(filename)  # Open the saved image using Pillow
-    img.save(filename, "PNG", optimize=True, quality=quality)  # Compress the image
-    plt.close(fig)  # Close the plot to free up memory
+"""# Check the number of rows, columns and missing values"""
 
-# Function to load data
-def load_data(file_path):
-    encoding = detect_encoding(file_path)
-    return pd.read_csv(file_path, encoding=encoding)
+def analyze_df(df):
+  """
+   Gets dataframe, analyzes its rows, columns, and missing values.
+  Args:
+    df: dataframe to analyze.
+  Returns:
+    A dictionary containing the analysis results.
+  """
 
-# Function to summarize data
-def summarize_data(data):
-    summary = {
-        "Missing Values": data.isnull().sum().to_dict(),
-        "Summary Statistics": data.describe(include="all").to_dict()
+  try:
+    # get the shape of dataframe
+    num_rows, num_cols = df.shape
+
+    # Calculate the number of missing values in each column
+    missing_values = df.isnull().sum()
+
+    # Calculate the percentage of missing values in each column
+    missing_percentages = (missing_values / num_rows) * 100
+
+
+    # Store the analysis results in a dictionary
+    results = {
+        "rows": num_rows,
+        "columns": num_cols,
+        "percentage_missing_values": missing_percentages.to_dict()  # Convert to dictionary
+        }
+    print(results)
+    return results
+  except Exception as e:
+    print(f"An unexpected error occurred: {e}")
+    return None
+
+"""# Get the descriptive statistics for the numerical features in the dataframe"""
+
+def get_descriptive_stats(df):
+  """
+  Function:
+    To get the descriptive statistics for given dataframe
+  Args:
+    df: dataframe to be analyzed.
+  Returns:
+    dataframe with descriptive statistics
+  """
+  desc_stats = df.describe()
+  return desc_stats
+
+"""# Get the numeric and categorical columns for analysing the data"""
+
+#  Identifies numeric and categorical columns in a Pandas DataFrame ####
+def get_column_types(df):
+  """
+  Identifies numeric and categorical columns in a Pandas DataFrame.
+  Args:
+    df: The input Pandas DataFrame.
+  Returns:
+    A tuple containing two lists: numeric column names and categorical column names.
+  """
+  numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+  categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+  return numeric_cols, categorical_cols
+
+"""# Generate correlation heatmap"""
+
+def generate_correlation_heatmap(df, title="Correlation Heatmap"):
+  """
+  Generates a correlation heatmap for numerical variables in a Pandas DataFrame.
+  Args:
+    df: The input Pandas DataFrame.
+    title: The title of the heatmap (default: "Correlation Heatmap").
+  """
+
+  # Select only numerical features for correlation analysis
+  numerical_df = df.select_dtypes(include=['number'])
+
+  # Calculate the correlation matrix
+  correlation_matrix = numerical_df.corr()
+  # Create the heatmap using seaborn
+  plt.figure(figsize=(10, 8))  # Adjust figure size as needed
+  sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+  plt.title(title)
+  plt.savefig('heatmap.png', dpi=64)
+  plt.show()
+  return correlation_matrix
+
+"""# Get the LLM response for given prompt"""
+
+def get_LLMResponse(prompt):
+  """
+  Function:
+    Generates a response from LLM for the given prompt.
+  Args:
+    prompt: the prompt to be sent to LLM
+  Returns:
+    response from LLM
+  """
+  AIPROXY_TOKEN = os.getenv('AIPROXY_TOKEN')
+  #AIPROXY_TOKEN = userdata.get('AIPROXY_TOKEN')
+  API_URL = 'https://aiproxy.sanand.workers.dev/openai/v1/chat/completions'
+
+  headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {AIPROXY_TOKEN}",
     }
-    return summary
+  data = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": prompt}],
+    }
 
-# Outlier Detection using KMeans
-def detect_and_plot_outliers(data, output_file):
-    numeric_data = data.select_dtypes(include=[np.number])
-    
-    # Handle missing values by imputing with the mean of each column
-    imputer = SimpleImputer(strategy='mean')
-    data_imputed = imputer.fit_transform(numeric_data)
-    
-    # Standardize the data
-    scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(data_imputed)
+  response = requests.post(API_URL, headers=headers, json=data)
+  print("LLM Response code: ", response.status_code)
+  if response.status_code == 200:
+    return response
+  else:
+    exit(1)
 
-    # Apply KMeans to detect outliers
-    kmeans = KMeans(n_clusters=3, random_state=42)
-    kmeans.fit(data_scaled)
-    
-    # Calculate distances from the cluster centroids
-    distances = kmeans.transform(data_scaled).min(axis=1)
-    
-    # Define the threshold for outliers (3 standard deviations from the mean distance)
-    threshold = distances.mean() + 3 * distances.std()
-    outliers = distances > threshold
+def get_LLMResponseForImage(Image, prompt):
+  AIPROXY_TOKEN = os.getenv('AIPROXY_TOKEN')
+  #AIPROXY_TOKEN = userdata.get('AIPROXY_TOKEN')
+  API_URL = 'https://aiproxy.sanand.workers.dev/openai/v1/chat/completions'
 
-    # Plot the non-outliers and outliers
-    fig, ax = plt.subplots(figsize=(8, 6))  # Create a new figure for plotting
-    ax.scatter(
-        np.where(~outliers)[0], distances[~outliers],
-        c='blue', label="Non-Outliers"
-    )
-    ax.scatter(
-        np.where(outliers)[0], distances[outliers],
-        c='red', label="Outliers"
-    )
-    
-    ax.set_title("Outlier Detection (KMeans)", fontsize=16)
-    ax.set_xlabel("Data Points", fontsize=12)
-    ax.set_ylabel("Distance from Centroid", fontsize=12)
-    ax.legend()
-    plt.tight_layout()
-    
-    # Save the plot with compression
-    save_compressed_plot(fig, output_file)
 
-# Function to generate correlation heatmap
-def generate_correlation_heatmap(data, output_file):
-    numeric_data = data.select_dtypes(include=[np.number])
-    correlation = numeric_data.corr()
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(correlation, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-    ax.set_title("Correlation Heatmap")
-    save_compressed_plot(fig, output_file)
+  # Read the image file as binary data
+  with open(Image, 'rb') as image_file:
+      image_data = image_file.read()
 
-# Function to perform PCA and KMeans clustering
-def perform_pca_and_kmeans(data, output_file):
-    numeric_data = data.select_dtypes(include=[np.number])
-    imputer = SimpleImputer(strategy="mean")
-    scaled_data = StandardScaler().fit_transform(imputer.fit_transform(numeric_data))
+  # Encode the image data to base64
+  base64_image = base64.b64encode(image_data).decode('utf-8')
 
-    pca = PCA(n_components=2)
-    pca_result = pca.fit_transform(scaled_data)
+  headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {AIPROXY_TOKEN}",
+    }
 
-    kmeans = KMeans(n_clusters=3, random_state=42)
-    clusters = kmeans.fit_predict(scaled_data)
+  data = {
+      "model": "gpt-4o-mini",
+      "messages": [
+          {
+              "role": "user",
+              "content": [
+                  {
+                      "type": "text",
+                      "text": prompt
+                  },
+                  {
+                      "type": "image_url",
+                      "image_url": {
+                          "detail": "low",
+                          # Instead of passing the image URL, we create a base64 encoded data URL
+                          "url": f"data:image/jpeg;base64,{base64_image}"
+                      }
+                  }
+              ]
+          }
+      ]
+  }
+  response = requests.post(API_URL, headers=headers, json=data)
+  print("LLM Response code: ", response.status_code)
+  if response.status_code == 200:
+    return response
+  else:
+    exit(1)
 
-    # Visualize PCA with clusters
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.scatterplot(x=pca_result[:, 0], y=pca_result[:, 1], hue=clusters, palette="viridis", ax=ax)
-    ax.set_title("PCA and KMeans Clustering")
-    ax.set_xlabel("Principal Component 1")
-    ax.set_ylabel("Principal Component 2")
-    save_compressed_plot(fig, output_file)
-
-# Function for time series analysis
-def perform_time_series_analysis(data, output_file):
-    time_cols = [col for col in data.columns if pd.api.types.is_datetime64_any_dtype(data[col])]
-    if not time_cols:
-        return False  # No time series data
-    fig = px.line(data, x=time_cols[0], y=data.select_dtypes(include=[np.number]).columns[0], title="Time Series Analysis")
-    fig.write_image(output_file)
-    return True
-
-# Function for geographical analysis
-def perform_geographical_analysis(data, output_file):
-    if {'latitude', 'longitude'}.issubset(data.columns):
-        m = folium.Map(location=[data['latitude'].mean(), data['longitude'].mean()], zoom_start=4)
-        marker_cluster = MarkerCluster().add_to(m)
-        for _, row in data.iterrows():
-            folium.Marker([row['latitude'], row['longitude']]).add_to(marker_cluster)
-        m.save(output_file)
-        return True
-    return False
-
-# Function to generate a story with AI Proxy
-def generate_story(summary, visualizations):
-    summary_str = f"Summary: {summary['Summary Statistics']}\nMissing: {summary['Missing Values']}"
-    prompt = f"""
-    Given the following data analysis results:
-    {summary_str}
-    And the visualizations generated:
-    - Outlier Detection
-    - Correlation Heatmap
-    - PCA Clustering
-    - Time Series Analysis (if present)
-    - Geographic Analysis (if present)
-
-    Provide a comprehensive narrative with key findings and insights.
+def get_LLMResponseForFeatures(df, column_info, summary_stats):
     """
-    headers = {"Authorization": f"Bearer {AI_PROXY_TOKEN}", "Content-Type": "application/json"}
-    response = requests.post(
-        "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 1500},
-        headers=headers,
-    )
+    Prompts the LLM to suggest feature engineering strategies.
+
+    Args:
+        df: The input DataFrame.
+        column_info: A dictionary containing column names and their data types.
+        summary_stats: Summary statistics of the DataFrame.
+
+    Returns:
+        A dictionary containing suggested features for dropping, one-hot encoding, and ordinal encoding.
+    """
+
+    prompt = f"""
+    For data analysis, Identify features that can be dropped(ex. features that are not useful for predictive modeling or clustering with a brief explanation for each column).
+    Identify features for one-hot encoding.
+    Identify features for ordinal encoding.
+    Provide your response in JSON format with the following structure:
+    json {{ "drop_features": ["feature1", "feature2", ...], "onehot_features": ["feature3", "feature4", ...], "ordinal_features": ["feature5", "feature6", ...]
+
+    Column Information:
+    {column_info}
+
+    Summary Statistics:
+    {summary_stats}
+
+    Data Head:
+    {df.head()}
+    """
+
+    # Send the prompt to the LLM (using your preferred method, e.g., get_LLMResponse)
+    response = get_LLMResponse(prompt)
+
     if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
+        return response
     else:
-        return f"Failed to generate story. Error {response.status_code}: {response.text}"
+        print(f"Request failed with status code: {response.status_code}")
+        return None
 
-# Function to save the final report
-def save_report(story, output_file):
-    print(f"Saving the report to {output_file}...")
+"""# Get Percentage of outliers in each column"""
 
-    # Check if each file exists before adding it to the report
-    report_content = "# Analysis Report\n\n"
-    report_content += "## Key Insights\n\n"
-    report_content += story
-    report_content += "\n\n## Visualizations\n"
+def get_outlier_percentage(df, column):
+  """
+  Function:
+    Gets the percentage of outliers for given column.
+  Args:
+    df: Dataframe
+    column: Column to analyse outliers
+  Returns:
+    Percentage of outliers in given column.
+  """
+  Q1 = df[column].quantile(0.25)
+  Q3 = df[column].quantile(0.75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  outliers = ((df[column] < lower_bound) | (df[column] > upper_bound)).sum()
+  total_entries = df[column].count()
+  return (outliers / total_entries) * 100
 
-    # Visualizations section: add only files that exist
-    if os.path.exists("compressed_correlation_heatmap.png"):
-        report_content += "- ![Correlation Heatmap](compressed_correlation_heatmap.png)\n"
-    if os.path.exists("compressed_pca_kmeans.png"):
-        report_content += "- ![PCA Clustering](compressed_pca_kmeans.png)\n"
-    if os.path.exists("compressed_timeseries.png"):
-        report_content += "- ![Time Series](compressed_timeseries.png)\n"
-    if os.path.exists("compressed_outliers.png"):
-        report_content += "- ![Outlier Detection](compressed_outliers.png)\n"
-    if os.path.exists("geographic_analysis.html"):
-        report_content += "- Interactive Map: geographic_analysis.html\n"
+"""# Identify Clusters in the given dataset"""
 
-    # Write the content to the output file
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(report_content)
+def generate_elbow_chart(X_scaled, k_range=(1, 11), filename="elbow_chart.png"):
+    """
+    Generates an elbow chart for KMeans clustering and saves it as an image.
 
-    print("Report saved successfully!")
+    Args:
+        X_scaled: Scaled data for clustering.
+        k_range: Range of k values to consider.
+        filename: Name of the file to save the image (default: "elbow_chart.png").
+    """
+    wcss = []  # Within-cluster sum of squares
 
-# Main execution
+    for k in range(k_range[0], k_range[1]):
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans.fit(X_scaled)
+        wcss.append(kmeans.inertia_)
+
+    # Plot the elbow method
+    plt.figure(figsize=(8, 8))  # Adjust figure size for desired aspect ratio
+    plt.plot(range(k_range[0], k_range[1]), wcss, marker='o')
+    plt.title('Elbow Method for Optimal k')
+    plt.xlabel('Number of Clusters (k)')
+    plt.ylabel('WCSS')
+    plt.savefig(filename, dpi=64, bbox_inches='tight', pad_inches=0.5)  # Adjust dpi and padding as needed
+    plt.show()
+
+def identify_clusters(X_scaled, k=3):
+    """
+    Identifies clusters in a DataFrame using KMeans clustering.
+    """
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    X_scaled['cluster'] = kmeans.fit_predict(X_scaled)
+    return X_scaled
+
+def apply_pca_with_variance(X_scaled, variance_threshold=0.90):
+    """
+    Applies PCA to scaled data and retains components explaining a specified variance threshold.
+
+    Args:
+        X_scaled: Scaled data for PCA.
+        variance_threshold: Desired variance explained (default: 0.80).
+
+    Returns:
+        A tuple containing:
+            - pca: The fitted PCA object.
+            - X_pca: The transformed data with reduced dimensions.
+    """
+    pca = PCA()  # Initialize PCA without specifying n_components
+    pca.fit(X_scaled)  # Fit PCA to the scaled data
+
+    # Calculate cumulative explained variance
+    cumulative_variance = pca.explained_variance_ratio_.cumsum()
+
+    # Find the number of components explaining the desired variance
+    n_components = len(cumulative_variance[cumulative_variance <= variance_threshold]) + 1
+
+    # if n_components == len(cumulative_variance) + 1: # if n_components is greater than or equal to maximum components required to explain the desired variance, then we will set n_componenets to a number to prevent error
+    #     n_components = len(cumulative_variance)
+    # print(f"Number of components explaining {variance_threshold*100:.2f}% variance: {n_components}")
+
+    # Apply PCA with the determined number of components
+    pca = PCA(n_components=n_components)
+    X_pca = pca.fit_transform(X_scaled)
+
+    return pca, X_pca
+
+"""# Preprocess data"""
+
+def preprocess_data(df_data, numeric_features, categorical_features):
+    """
+    Imputes missing values, scales numerical features, and encodes categorical features.
+
+    Args:
+        df_data: The input DataFrame.
+        numeric_features: A list of numerical features to process.
+        categorical_features: A list of categorical features to process.
+
+    Returns:
+        A DataFrame with preprocessed features.
+    """
+
+    # 1. Impute and scale numerical features
+    num_imputer = SimpleImputer(strategy='mean')
+    df_data[numeric_features] = num_imputer.fit_transform(df_data[numeric_features])
+    scaler = StandardScaler()
+    df_data[numeric_features] = scaler.fit_transform(df_data[numeric_features])
+    print(df_data.shape)
+
+    # 2. Impute and encode categorical features
+    cat_imputer = SimpleImputer(strategy='most_frequent')  # Impute with most frequent value
+    df_data[categorical_features] = cat_imputer.fit_transform(df_data[categorical_features])
+    # if No. of unique values in a column is more than 20, then drop the column
+    for col in df_data[categorical_features]:
+      if df_data[col].nunique() > 20:
+        print(f"Dropping column '{col}' due to more than 20 unique values.")
+        df_data = df_data.drop(columns=[col])
+    categorical_features = [col for col in categorical_features if col in df_data.columns]
+    encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')  # One-hot encoding
+    encoded_data = encoder.fit_transform(df_data[categorical_features])
+    encoded_df_data = pd.DataFrame(encoded_data, columns=encoder.get_feature_names_out(categorical_features))
+    df_data = df_data.drop(categorical_features, axis=1)  # Drop original categorical columns
+    df_data = pd.concat([df_data, encoded_df_data], axis=1)  # Concatenate encoded features
+    print(df_data.shape)
+    return df_data
+
+"""# Generate cluster map in 2D"""
+
+# Apply PCA to reduce dimensionality to 2
+def generate_cluster_map(X_scaled):
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+
+
+    # Visualize clusters using scatter plot
+    plt.figure(figsize=(8, 6))
+    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=X_scaled['cluster'], cmap='viridis')
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    plt.title('Clusters Visualization')
+    plt.savefig('clusters_2d.png', dpi=64)
+    plt.show()
+    return df
+
+"""# Copy the files to correct directory"""
+
+def copy_file(source_path, destination_path):
+       """Copies a file using lower-level file I/O."""
+       with open(source_path, 'rb') as source_file, open(destination_path, 'wb') as destination_file:
+           destination_file.write(source_file.read())
+
+"""# Generate the mardown file from the response got from LLM"""
+
+def generate_report(df, numeric_columns, file_path, response_json):
+    """
+    Generates a report folder with README.md and cluster image.
+
+    Args:
+        df: The input DataFrame.
+        numeric_columns: List of numerical columns for clustering.
+        file_path: Path to the CSV file.
+        response_json: JSON response from OpenAI.
+    """
+
+    # 1. Create folder named after CSV file (without extension)
+    file_name = os.path.splitext(os.path.basename(file_path))[0]  # Extract filename without extension
+    folder_path = file_name  # Create folder with the same name
+    os.makedirs(folder_path, exist_ok=True)  # Create folder if it doesn't exist
+
+    # 2. Copy cluster image to the folder
+    image_source = 'clusters_2d.png'
+    image_destination = os.path.join(folder_path, image_source)
+    copy_file(image_source, image_destination)  # Copy image to folder
+    image_source = 'heatmap.png'
+    image_destination = os.path.join(folder_path, image_source)
+    copy_file(image_source, image_destination)  # Copy image to folder
+
+
+    # 3. Generate README.md from OpenAI response JSON
+    try:
+        readme_content = response_json['choices'][0]['message']['content']
+        readme_path = os.path.join(folder_path, 'README.md')
+        with open(readme_path, 'w') as f:
+            f.write(readme_content)
+    except (KeyError, IndexError) as e:
+        print(f"Error extracting README content from JSON: {e}")
+        print("Using default README content.")
+        # ... (add your default README content here) ...
+
+    print(f"Report generated in folder: {folder_path}")
+
+"""# Main Function"""
+
+############ MAIN FUNCTION############
+
 if __name__ == "__main__":
-    data = load_data(csv_file)
-    summary = summarize_data(data)
+  if len(sys.argv) != 2:
+    print("Usage: python script_name.py <csv_file_path>")
+    sys.exit(1)
 
-    # Generate the correlation heatmap
-    generate_correlation_heatmap(data, "compressed_correlation_heatmap.png")
+  file_path = sys.argv[1]
+  df = read_csv(file_path)
+  if df is None:
+      exit(1)
+  descriptive_stats = get_descriptive_stats(df)
+  #print(descriptive_stats)
+  df_info = analyze_df(df)
+  numeric_columns, categorical_columns = get_column_types(df)
+  corr_mat = generate_correlation_heatmap(df)
+  outlier_percentages = {}
+  for column in numeric_columns:
+    outlier_percentage = get_outlier_percentage(df, column)
+    outlier_percentages[column] = outlier_percentage
 
-    # Generate the PCA and KMeans plot
-    perform_pca_and_kmeans(data, "compressed_pca_kmeans.png")
+  print("Outlier Percentages:")
+  for column, percentage in outlier_percentages.items():
+    print(f"  {column}: {percentage:.2f}%")
+  X_scaled = preprocess_data(df, numeric_columns, categorical_columns)
+  n_component, X_pca = apply_pca_with_variance(X_scaled)
+  print(X_scaled.shape, n_component, X_pca.shape)
+  generate_elbow_chart(X_scaled)
+  prompt = "I have an elbow chart for KMeans clustering. Determine the optimal number of clusters (k) from chart.Return only optimal k as a dictionary variable"
+  response = get_LLMResponseForImage('elbow_chart.png', prompt)
+  # Extract the content from the response
+  content = response.json()['choices'][0]['message']['content']
 
-    # Perform time series analysis
-    time_series_done = perform_time_series_analysis(data, "compressed_timeseries.png")
-
-    # Perform geographical analysis
-    geo_done = perform_geographical_analysis(data, "geographic_analysis.html")
-
-    # Generate the outlier detection plot
-    detect_and_plot_outliers(data, "compressed_outliers.png")
-    
-    # Generate the story
-    story = generate_story(summary, ["compressed_correlation_heatmap.png", "compressed_pca_kmeans.png", "compressed_outliers.png"])
-    
-    if story:
-        save_report(story, "README.md")
-        print("Analysis complete! Report saved to README.md.")
-    else:
-        print("Failed to generate story. Report not saved.")
+  # Use a regular expression to find the integer value of k
+  match = re.search(r'\d+', content)
+  # Let the optimal k value be 3 by default
+  optimal_k=3
+  if match:
+    optimal_k = int(match.group())
+    print(f"Optimal k: {optimal_k}")
+  clustered_df = identify_clusters(X_scaled,optimal_k )
+  generate_cluster_map(clustered_df)
+  file_name = file_path
+  df_info
+  column_info = df.dtypes.to_dict()  # Column names and types
+  summary_stats = df.describe().to_string()  # Summary statistics
+  outlier_percentages
+  corr_mat
+  cluster_image = plt.imread('clusters_2d.png')
+  prompt = f"""
+  Generate a README.md file that summarizes the data {df.head()}
+  """
+  # Send the prompt to the LLM (using your preferred method, e.g., get_LLMResponse)
+  response = get_LLMResponse(prompt)
+  if response:
+    try:
+        response_json = response.json()
+        generate_report(df, numeric_columns, file_path, response_json)
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON response: {e}")
+else:
+    print(f"Request failed with status code: {response.status_code}")
