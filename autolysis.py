@@ -1,527 +1,355 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # dependencies = [
-#     "chardet",
-#     "matplotlib",
-#     "numpy",
-#     "openai",
-#     "pandas",
-#     "python-dotenv",
-#     "requests",
-#     "scikit-learn",
-#     "seaborn",
+#   "chardet>=5.2.0",
+#   "matplotlib>=3.9.3",
+#   "numpy>=2.2.0",
+#   "openai>=1.57.2",
+#   "pandas>=2.2.3",
+#   "python-dotenv>=1.0.1",
+#   "requests>=2.32.3",
+#   "scikit-learn>=1.6.0",
+#   "seaborn>=0.13.2",
 # ]
 # ///
+
 import os
 import pandas as pd
-import numpy as np
-import sys as sys
 import seaborn as sns
 import matplotlib.pyplot as plt
-import openai
 import requests
-import chardet
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
 from sklearn.impute import SimpleImputer
+from sklearn.cluster import KMeans
 from dotenv import load_dotenv
+import chardet
 import base64
-import re
+from functools import lru_cache
 
-
+# Load environment variables
 load_dotenv()
+AIPROXY_TOKEN = os.getenv("AIPROXY_TOKEN")
 
-"""# Read csv file and put the data into pandas DataFrame"""
+if not AIPROXY_TOKEN:
+    raise ValueError("AIPROXY_TOKEN environment variable is not set.")
 
-def read_csv(file_path):
-  """
-  Function:
-    Reads a CSV file.
-  Args:
-    file_path: Path to the CSV file.
-  Returns:
-    A dataframe having data from csv file.
-  """
-  print(file_path)
-  try:
-    # Get the encoding of the file
-    with open(file_path, 'rb') as f:
-      result = chardet.detect(f.read())
-      encoding = result['encoding']
-      print(encoding)
-    # Read the CSV file into a pandas DataFrame
-    df = pd.read_csv(file_path, encoding=encoding, encoding_errors='ignore')
-    print(df.head())
+BASE_URL = "http://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
+
+@lru_cache(maxsize=10)
+def query_chat_completion(prompt, model="gpt-4o-mini"):
+    """Send a chat prompt to the LLM and cache results to optimize API interactions."""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {AIPROXY_TOKEN}"
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    try:
+        response = requests.post(BASE_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response content returned.")
+    except requests.RequestException as e:
+        raise Exception(f"Error during LLM query: {e}")
+
+
+def detect_file_encoding(filepath):
+    """Detect the encoding of a file."""
+    with open(filepath, "rb") as file:
+        result = chardet.detect(file.read(100000))  # Read the first 100,000 bytes
+        return result["encoding"]
+
+def load_data(filename):
+    """Load CSV data into a Pandas DataFrame, handling file encoding with fallbacks."""
+    try:
+        # Detect encoding
+        encoding = detect_file_encoding(filename)
+        print(f"Detected encoding for {filename}: {encoding}")
+
+        # Try reading the file with the detected encoding
+        return pd.read_csv(filename, encoding=encoding)
+    except Exception as primary_error:
+        print(f"Primary encoding {encoding} failed: {primary_error}")
+
+        # Fallback encodings
+        fallback_encodings = ["utf-8-sig", "latin1"]
+        for fallback in fallback_encodings:
+            try:
+                print(f"Trying fallback encoding: {fallback}")
+                return pd.read_csv(filename, encoding=fallback)
+            except Exception as fallback_error:
+                print(f"Fallback encoding {fallback} failed: {fallback_error}")
+
+        # Raise error if all attempts fail
+        raise ValueError(f"Failed to load file {filename} with any encoding.")
+
+def generic_analysis(df):
+    """Perform generic analysis on the dataset."""
+    analysis = {
+        "shape": df.shape,
+        "columns": df.columns.tolist(),
+        "dtypes": df.dtypes.to_dict(),
+        "missing_values": df.isnull().sum().to_dict(),
+        "summary_stats": df.describe(include="all").to_dict(),
+        "variance": df.var(numeric_only=True).to_dict(),
+        "skewness": df.skew(numeric_only=True).to_dict()
+    }
+    return analysis
+
+def preprocess_data(df):
+    """Preprocess data to handle missing values."""
+    numeric_df = df.select_dtypes(include=['float', 'int'])
+    imputer = SimpleImputer(strategy='mean')  # Replace missing values with the mean
+    numeric_df_imputed = pd.DataFrame(imputer.fit_transform(numeric_df), columns=numeric_df.columns)
+    return numeric_df_imputed
+
+def preprocess_for_visualization(df, max_rows=1000):
+    """Limit the dataset to a subset for faster visualizations."""
+    if df.shape[0] > max_rows:
+        return df.sample(max_rows, random_state=42)
     return df
-  except FileNotFoundError:
-    print(f"Error: File not found at path: {file_path}")
-    return None
-  except pd.errors.ParserError:
-    print(f"Error: Could not parse the CSV file. Check its format.")
-    return None
-  except Exception as e:
-    print(f"An unexpected error occurred: {e}")
-    return None
 
-"""# Check the number of rows, columns and missing values"""
-
-def analyze_df(df):
-  """
-   Gets dataframe, analyzes its rows, columns, and missing values.
-  Args:
-    df: dataframe to analyze.
-  Returns:
-    A dictionary containing the analysis results.
-  """
-
-  try:
-    # get the shape of dataframe
-    num_rows, num_cols = df.shape
-
-    # Calculate the number of missing values in each column
-    missing_values = df.isnull().sum()
-
-    # Calculate the percentage of missing values in each column
-    missing_percentages = (missing_values / num_rows) * 100
-
-
-    # Store the analysis results in a dictionary
-    results = {
-        "rows": num_rows,
-        "columns": num_cols,
-        "percentage_missing_values": missing_percentages.to_dict()  # Convert to dictionary
-        }
-    print(results)
-    return results
-  except Exception as e:
-    print(f"An unexpected error occurred: {e}")
-    return None
-
-"""# Get the descriptive statistics for the numerical features in the dataframe"""
-
-def get_descriptive_stats(df):
-  """
-  Function:
-    To get the descriptive statistics for given dataframe
-  Args:
-    df: dataframe to be analyzed.
-  Returns:
-    dataframe with descriptive statistics
-  """
-  desc_stats = df.describe()
-  return desc_stats
-
-"""# Get the numeric and categorical columns for analysing the data"""
-
-#  Identifies numeric and categorical columns in a Pandas DataFrame ####
-def get_column_types(df):
-  """
-  Identifies numeric and categorical columns in a Pandas DataFrame.
-  Args:
-    df: The input Pandas DataFrame.
-  Returns:
-    A tuple containing two lists: numeric column names and categorical column names.
-  """
-  numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-  categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-  return numeric_cols, categorical_cols
-
-"""# Generate correlation heatmap"""
-
-def generate_correlation_heatmap(df, title="Correlation Heatmap"):
-  """
-  Generates a correlation heatmap for numerical variables in a Pandas DataFrame.
-  Args:
-    df: The input Pandas DataFrame.
-    title: The title of the heatmap (default: "Correlation Heatmap").
-  """
-
-  # Select only numerical features for correlation analysis
-  numerical_df = df.select_dtypes(include=['number'])
-
-  # Calculate the correlation matrix
-  correlation_matrix = numerical_df.corr()
-  # Create the heatmap using seaborn
-  plt.figure(figsize=(10, 8))  # Adjust figure size as needed
-  sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-  plt.title(title)
-  plt.savefig('heatmap.png', dpi=64)
-  plt.show()
-  return correlation_matrix
-
-"""# Get the LLM response for given prompt"""
-
-def get_LLMResponse(prompt):
-  """
-  Function:
-    Generates a response from LLM for the given prompt.
-  Args:
-    prompt: the prompt to be sent to LLM
-  Returns:
-    response from LLM
-  """
-  AIPROXY_TOKEN = os.getenv('AIPROXY_TOKEN')
-  #AIPROXY_TOKEN = userdata.get('AIPROXY_TOKEN')
-  API_URL = 'https://aiproxy.sanand.workers.dev/openai/v1/chat/completions'
-
-  headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {AIPROXY_TOKEN}",
-    }
-  data = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
+def detect_feature_types(df):
+    """Detect feature types for special analyses."""
+    return {
+        "time_series": df.select_dtypes(include=['datetime']).columns.tolist(),
+        "geographic": [col for col in df.columns if any(geo in col.lower() for geo in ["latitude", "longitude", "region", "country"])],
+        "network": [col for col in df.columns if "source" in col.lower() or "target" in col.lower()],
+        "cluster": df.select_dtypes(include=['float', 'int']).columns.tolist()  # Numeric features for clustering
     }
 
-  response = requests.post(API_URL, headers=headers, json=data)
-  print("LLM Response code: ", response.status_code)
-  if response.status_code == 200:
-    return response
-  else:
-    exit(1)
+def perform_special_analyses(df, feature_types):
+    """Perform special analyses based on feature types."""
+    analyses = {}
 
-def get_LLMResponseForImage(Image, prompt):
-  AIPROXY_TOKEN = os.getenv('AIPROXY_TOKEN')
-  #AIPROXY_TOKEN = userdata.get('AIPROXY_TOKEN')
-  API_URL = 'https://aiproxy.sanand.workers.dev/openai/v1/chat/completions'
-
-
-  # Read the image file as binary data
-  with open(Image, 'rb') as image_file:
-      image_data = image_file.read()
-
-  # Encode the image data to base64
-  base64_image = base64.b64encode(image_data).decode('utf-8')
-
-  headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {AIPROXY_TOKEN}",
-    }
-
-  data = {
-      "model": "gpt-4o-mini",
-      "messages": [
-          {
-              "role": "user",
-              "content": [
-                  {
-                      "type": "text",
-                      "text": prompt
-                  },
-                  {
-                      "type": "image_url",
-                      "image_url": {
-                          "detail": "low",
-                          # Instead of passing the image URL, we create a base64 encoded data URL
-                          "url": f"data:image/jpeg;base64,{base64_image}"
-                      }
-                  }
-              ]
-          }
-      ]
-  }
-  response = requests.post(API_URL, headers=headers, json=data)
-  print("LLM Response code: ", response.status_code)
-  if response.status_code == 200:
-    return response
-  else:
-    exit(1)
-
-def get_LLMResponseForFeatures(df, column_info, summary_stats):
-    """
-    Prompts the LLM to suggest feature engineering strategies.
-
-    Args:
-        df: The input DataFrame.
-        column_info: A dictionary containing column names and their data types.
-        summary_stats: Summary statistics of the DataFrame.
-
-    Returns:
-        A dictionary containing suggested features for dropping, one-hot encoding, and ordinal encoding.
-    """
-
-    prompt = f"""
-    For data analysis, Identify features that can be dropped(ex. features that are not useful for predictive modeling or clustering with a brief explanation for each column).
-    Identify features for one-hot encoding.
-    Identify features for ordinal encoding.
-    Provide your response in JSON format with the following structure:
-    json {{ "drop_features": ["feature1", "feature2", ...], "onehot_features": ["feature3", "feature4", ...], "ordinal_features": ["feature5", "feature6", ...]
-
-    Column Information:
-    {column_info}
-
-    Summary Statistics:
-    {summary_stats}
-
-    Data Head:
-    {df.head()}
-    """
-
-    # Send the prompt to the LLM (using your preferred method, e.g., get_LLMResponse)
-    response = get_LLMResponse(prompt)
-
-    if response.status_code == 200:
-        return response
+    # Time Series Analysis
+    if feature_types["time_series"]:
+        analyses["time_series"] = [
+            f"Time-series features detected: {', '.join(feature_types['time_series'])}. "
+            "These can be used to observe trends or forecast future patterns."
+        ]
     else:
-        print(f"Request failed with status code: {response.status_code}")
-        return None
+        analyses["time_series"] = ["No time-series features detected."]
 
-"""# Get Percentage of outliers in each column"""
+    # Geographic Analysis
+    if len(feature_types["geographic"]) >= 2:
+        analyses["geographic"] = [
+            f"Geographic features detected: {', '.join(feature_types['geographic'][:2])}. "
+            "These can be used to visualize or analyze spatial distributions."
+        ]
+    else:
+        analyses["geographic"] = ["No geographic features detected."]
 
-def get_outlier_percentage(df, column):
-  """
-  Function:
-    Gets the percentage of outliers for given column.
-  Args:
-    df: Dataframe
-    column: Column to analyse outliers
-  Returns:
-    Percentage of outliers in given column.
-  """
-  Q1 = df[column].quantile(0.25)
-  Q3 = df[column].quantile(0.75)
-  IQR = Q3 - Q1
-  lower_bound = Q1 - 1.5 * IQR
-  upper_bound = Q3 + 1.5 * IQR
-  outliers = ((df[column] < lower_bound) | (df[column] > upper_bound)).sum()
-  total_entries = df[column].count()
-  return (outliers / total_entries) * 100
+    # Network Analysis
+    if len(feature_types["network"]) >= 2:
+        analyses["network"] = [
+            f"Network relationships detected between {feature_types['network'][0]} and {feature_types['network'][1]}. "
+            "These can be analyzed for connectivity or collaborations."
+        ]
+    else:
+        analyses["network"] = ["No network features detected."]
 
-"""# Identify Clusters in the given dataset"""
+    # Cluster Analysis
+    if len(feature_types["cluster"]) > 1:
+        analyses["cluster"] = [
+            "Cluster analysis is feasible with the available numeric features. "
+            "This could help identify natural groupings in the data."
+        ]
+    else:
+        analyses["cluster"] = ["Not enough numeric features for cluster analysis."]
 
-def generate_elbow_chart(X_scaled, k_range=(1, 11), filename="elbow_chart.png"):
-    """
-    Generates an elbow chart for KMeans clustering and saves it as an image.
+    return analyses
 
-    Args:
-        X_scaled: Scaled data for clustering.
-        k_range: Range of k values to consider.
-        filename: Name of the file to save the image (default: "elbow_chart.png").
-    """
-    wcss = []  # Within-cluster sum of squares
+def advanced_analysis(df):
+    """Perform advanced statistical and exploratory data analysis."""
+    analysis = {}
 
-    for k in range(k_range[0], k_range[1]):
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        kmeans.fit(X_scaled)
-        wcss.append(kmeans.inertia_)
+    # Correlation analysis for significant features
+    correlation_matrix = df.corr()
+    high_corr_pairs = correlation_matrix.abs().unstack().sort_values(ascending=False)
+    significant_corr = high_corr_pairs[high_corr_pairs > 0.7].drop_duplicates()
+    analysis["significant_correlations"] = significant_corr.to_dict()
 
-    # Plot the elbow method
-    plt.figure(figsize=(8, 8))  # Adjust figure size for desired aspect ratio
-    plt.plot(range(k_range[0], k_range[1]), wcss, marker='o')
-    plt.title('Elbow Method for Optimal k')
-    plt.xlabel('Number of Clusters (k)')
-    plt.ylabel('WCSS')
-    plt.savefig(filename, dpi=64, bbox_inches='tight', pad_inches=0.5)  # Adjust dpi and padding as needed
-    plt.show()
+    # Hypothesis testing example: Chi-Square test for independence (categorical data)
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    if len(categorical_cols) > 1:
+        from scipy.stats import chi2_contingency
+        chi_results = {}
+        for i in range(len(categorical_cols)):
+            for j in range(i + 1, len(categorical_cols)):
+                contingency_table = pd.crosstab(df[categorical_cols[i]], df[categorical_cols[j]])
+                chi2, p, _, _ = chi2_contingency(contingency_table)
+                chi_results[f"{categorical_cols[i]} vs {categorical_cols[j]}"] = {"chi2": chi2, "p_value": p}
+        analysis["chi_square_tests"] = chi_results
 
-def identify_clusters(X_scaled, k=3):
-    """
-    Identifies clusters in a DataFrame using KMeans clustering.
-    """
-    kmeans = KMeans(n_clusters=k, random_state=42)
-    X_scaled['cluster'] = kmeans.fit_predict(X_scaled)
-    return X_scaled
+    # Clustering insights with KMeans
+    if len(df.select_dtypes(include=['float', 'int']).columns) > 1:
+        kmeans = KMeans(n_clusters=3, random_state=42).fit(df.select_dtypes(include=['float', 'int']))
+        analysis["kmeans_clusters"] = pd.Series(kmeans.labels_).value_counts().to_dict()
 
-def apply_pca_with_variance(X_scaled, variance_threshold=0.90):
-    """
-    Applies PCA to scaled data and retains components explaining a specified variance threshold.
+    return analysis
 
-    Args:
-        X_scaled: Scaled data for PCA.
-        variance_threshold: Desired variance explained (default: 0.80).
-
-    Returns:
-        A tuple containing:
-            - pca: The fitted PCA object.
-            - X_pca: The transformed data with reduced dimensions.
-    """
-    pca = PCA()  # Initialize PCA without specifying n_components
-    pca.fit(X_scaled)  # Fit PCA to the scaled data
-
-    # Calculate cumulative explained variance
-    cumulative_variance = pca.explained_variance_ratio_.cumsum()
-
-    # Find the number of components explaining the desired variance
-    n_components = len(cumulative_variance[cumulative_variance <= variance_threshold]) + 1
-
-    # if n_components == len(cumulative_variance) + 1: # if n_components is greater than or equal to maximum components required to explain the desired variance, then we will set n_componenets to a number to prevent error
-    #     n_components = len(cumulative_variance)
-    # print(f"Number of components explaining {variance_threshold*100:.2f}% variance: {n_components}")
-
-    # Apply PCA with the determined number of components
-    pca = PCA(n_components=n_components)
-    X_pca = pca.fit_transform(X_scaled)
-
-    return pca, X_pca
-
-"""# Preprocess data"""
-
-def preprocess_data(df_data, numeric_features, categorical_features):
-    """
-    Imputes missing values, scales numerical features, and encodes categorical features.
-
-    Args:
-        df_data: The input DataFrame.
-        numeric_features: A list of numerical features to process.
-        categorical_features: A list of categorical features to process.
-
-    Returns:
-        A DataFrame with preprocessed features.
-    """
-
-    # 1. Impute and scale numerical features
-    num_imputer = SimpleImputer(strategy='mean')
-    df_data[numeric_features] = num_imputer.fit_transform(df_data[numeric_features])
-    scaler = StandardScaler()
-    df_data[numeric_features] = scaler.fit_transform(df_data[numeric_features])
-    print(df_data.shape)
-
-    # 2. Impute and encode categorical features
-    cat_imputer = SimpleImputer(strategy='most_frequent')  # Impute with most frequent value
-    df_data[categorical_features] = cat_imputer.fit_transform(df_data[categorical_features])
-    # if No. of unique values in a column is more than 20, then drop the column
-    for col in df_data[categorical_features]:
-      if df_data[col].nunique() > 20:
-        print(f"Dropping column '{col}' due to more than 20 unique values.")
-        df_data = df_data.drop(columns=[col])
-    categorical_features = [col for col in categorical_features if col in df_data.columns]
-    encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')  # One-hot encoding
-    encoded_data = encoder.fit_transform(df_data[categorical_features])
-    encoded_df_data = pd.DataFrame(encoded_data, columns=encoder.get_feature_names_out(categorical_features))
-    df_data = df_data.drop(categorical_features, axis=1)  # Drop original categorical columns
-    df_data = pd.concat([df_data, encoded_df_data], axis=1)  # Concatenate encoded features
-    print(df_data.shape)
-    return df_data
-
-"""# Generate cluster map in 2D"""
-
-# Apply PCA to reduce dimensionality to 2
-def generate_cluster_map(X_scaled):
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X_scaled)
+def adapt_prompt_based_on_data(data_summary, feature_types):
+    """Generate dynamic prompts based on dataset properties."""
+    if len(data_summary["columns"]) > 50:
+        return "The dataset has many columns. Focus on identifying the most critical features and summarizing insights concisely."
+    elif "time_series" in feature_types and feature_types["time_series"]:
+        return "The dataset contains time-series data. Provide detailed temporal trends and predictions."
+    else:
+        return "Analyze the dataset comprehensively and highlight correlations, distributions, and any anomalies."
 
 
-    # Visualize clusters using scatter plot
-    plt.figure(figsize=(8, 6))
-    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=X_scaled['cluster'], cmap='viridis')
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.title('Clusters Visualization')
-    plt.savefig('clusters_2d.png', dpi=64)
-    plt.show()
-    return df
+def agentic_workflow(data_summary, feature_types):
+    """Perform iterative multi-step analysis based on LLM responses."""
+    prompt = adapt_prompt_based_on_data(data_summary, feature_types)
+    initial_insights = query_chat_completion(prompt)
 
-"""# Copy the files to correct directory"""
+    # Use initial insights to refine the next step
+    if "missing values" in initial_insights.lower():
+        refinement_prompt = "You mentioned missing values. Suggest specific imputation strategies based on data types."
+        refinement = query_chat_completion(refinement_prompt)
+        return initial_insights + "\n" + refinement
+    else:
+        return initial_insights
 
-def copy_file(source_path, destination_path):
-       """Copies a file using lower-level file I/O."""
-       with open(source_path, 'rb') as source_file, open(destination_path, 'wb') as destination_file:
-           destination_file.write(source_file.read())
+def create_visualizations(df):
+    """Generate and save visualizations based on data."""
+    numeric_df = preprocess_data(df)
+    visualization_df = preprocess_for_visualization(numeric_df)
 
-"""# Generate the mardown file from the response got from LLM"""
+    # Correlation Heatmap
+    if numeric_df.shape[1] > 1:
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(numeric_df.corr(), annot=True, cmap="coolwarm", cbar_kws={'shrink': 0.8})
+        plt.title("Correlation Heatmap", fontsize=16)
+        plt.xlabel("Features")
+        plt.ylabel("Features")
+        plt.savefig("correlation_heatmap.png")
+        plt.close()
 
-def generate_report(df, numeric_columns, file_path, response_json):
-    """
-    Generates a report folder with README.md and cluster image.
+    # Outlier Detection with Seaborn Scatter Plot
+    if visualization_df.shape[1] > 1:
+        model = IsolationForest(random_state=42)
+        visualization_df['outlier_score'] = model.fit_predict(visualization_df)
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=visualization_df, x=visualization_df.columns[0], y=visualization_df.columns[1], hue='outlier_score', palette="Set1")
+        plt.title("Outlier Detection (Scatter Plot)", fontsize=16)
+        plt.xlabel(visualization_df.columns[0])
+        plt.ylabel(visualization_df.columns[1])
+        plt.legend(title="Outliers")
+        plt.savefig("outlier_detection.png")
+        plt.close()
 
-    Args:
-        df: The input DataFrame.
-        numeric_columns: List of numerical columns for clustering.
-        file_path: Path to the CSV file.
-        response_json: JSON response from OpenAI.
-    """
+    # Pair Plot for Relationship Analysis (limited columns)
+    if visualization_df.shape[1] > 1:
+        selected_columns = visualization_df.columns[:5]  # Limit to first 5 numeric columns
+        sns.pairplot(visualization_df[selected_columns], palette="husl")
+        plt.savefig("pairplot_analysis.png")
+        plt.close()
 
-    # 1. Create folder named after CSV file (without extension)
-    file_name = os.path.splitext(os.path.basename(file_path))[0]  # Extract filename without extension
-    folder_path = file_name  # Create folder with the same name
-    os.makedirs(folder_path, exist_ok=True)  # Create folder if it doesn't exist
+    # Distribution Plot
+    for col in visualization_df.columns[:5]:  # Limit to first 5 numeric columns
+        plt.figure(figsize=(8, 6))
+        sns.histplot(visualization_df[col], kde=True, color="skyblue")
+        plt.title(f"Distribution of {col}", fontsize=16)
+        plt.xlabel(col)
+        plt.ylabel("Frequency")
+        plt.savefig(f"distribution_{col}.png")
+        plt.close()
 
-    # 2. Copy cluster image to the folder
-    image_source = 'clusters_2d.png'
-    image_destination = os.path.join(folder_path, image_source)
-    copy_file(image_source, image_destination)  # Copy image to folder
-    image_source = 'heatmap.png'
-    image_destination = os.path.join(folder_path, image_source)
-    copy_file(image_source, image_destination)  # Copy image to folder
+    return ["correlation_heatmap.png", "outlier_detection.png", "pairplot_analysis.png"]
+
+def image_to_base64(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode("utf-8")
+
+def analyze_image_with_vision_api(image_path, model="gpt-4o-mini"):
+    """Analyze an image using the OpenAI Vision API."""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {AIPROXY_TOKEN}"
+    }
+    payload = {
+    "model": model,
+    "messages": [{"role": "user", "content": "Analyze this image."}],
+    "image": image_to_base64(image_path),
+    }
+    response = requests.post(BASE_URL, headers=headers, json=payload)
+
+def narrate_story(summary, insights, advanced_analyses, charts, special_analyses):
+    """Generate a cohesive and structured narrative story."""
+    special_analyses_summary = "\n".join(
+        f"{key.capitalize()} Analysis:\n" + "\n".join(value)
+        for key, value in special_analyses.items()
+    )
+    advanced_analyses_summary = "\n".join(
+        f"{key.capitalize()} Findings:\n{value}" for key, value in advanced_analyses.items()
+    )
+    prompt = (
+        f"The dataset has the following properties:\n{summary}\n"
+        f"Insights:\n{insights}\n"
+        f"Advanced Analysis:\n{advanced_analyses_summary}\n"
+        f"Special Analyses:\n{special_analyses_summary}\n"
+        f"The visualizations generated are: {', '.join(charts)}.\n"
+        "Please generate a well-structured Markdown report covering data properties, analysis, insights, visualizations, and implications. "
+        "Ensure that the content flows logically and highlights key findings with proper emphasis. "
+        "Use headings, bullet points, and descriptions to enhance readability."
+    )
+    return query_chat_completion(prompt)
 
 
-    # 3. Generate README.md from OpenAI response JSON
-    try:
-        readme_content = response_json['choices'][0]['message']['content']
-        readme_path = os.path.join(folder_path, 'README.md')
-        with open(readme_path, 'w') as f:
-            f.write(readme_content)
-    except (KeyError, IndexError) as e:
-        print(f"Error extracting README content from JSON: {e}")
-        print("Using default README content.")
-        # ... (add your default README content here) ...
+def save_readme(content, charts):
+    """Save narrative and charts as README.md."""
+    with open("README.md", "w") as file:
+        file.write(content)
+        for chart in charts:
+            file.write(f"![{chart}]({chart})\n")
 
-    print(f"Report generated in folder: {folder_path}")
-
-"""# Main Function"""
-
-############ MAIN FUNCTION############
-
+# Main Execution
 if __name__ == "__main__":
-  if len(sys.argv) != 2:
-    print("Usage: python script_name.py <csv_file_path>")
-    sys.exit(1)
+    import sys
 
-  file_path = sys.argv[1]
-  df = read_csv(file_path)
-  if df is None:
-      exit(1)
-  descriptive_stats = get_descriptive_stats(df)
-  #print(descriptive_stats)
-  df_info = analyze_df(df)
-  numeric_columns, categorical_columns = get_column_types(df)
-  corr_mat = generate_correlation_heatmap(df)
-  outlier_percentages = {}
-  for column in numeric_columns:
-    outlier_percentage = get_outlier_percentage(df, column)
-    outlier_percentages[column] = outlier_percentage
+    if len(sys.argv) != 2:
+        print("Usage: uv run autolysis.py <dataset.csv>")
+        sys.exit(1)
 
-  print("Outlier Percentages:")
-  for column, percentage in outlier_percentages.items():
-    print(f"  {column}: {percentage:.2f}%")
-  X_scaled = preprocess_data(df, numeric_columns, categorical_columns)
-  n_component, X_pca = apply_pca_with_variance(X_scaled)
-  print(X_scaled.shape, n_component, X_pca.shape)
-  generate_elbow_chart(X_scaled)
-  prompt = "I have an elbow chart for KMeans clustering. Determine the optimal number of clusters (k) from chart.Return only optimal k as a dictionary variable"
-  response = get_LLMResponseForImage('elbow_chart.png', prompt)
-  # Extract the content from the response
-  content = response.json()['choices'][0]['message']['content']
+    dataset = sys.argv[1]
 
-  # Use a regular expression to find the integer value of k
-  match = re.search(r'\d+', content)
-  # Let the optimal k value be 3 by default
-  optimal_k=3
-  if match:
-    optimal_k = int(match.group())
-    print(f"Optimal k: {optimal_k}")
-  clustered_df = identify_clusters(X_scaled,optimal_k )
-  generate_cluster_map(clustered_df)
-  file_name = file_path
-  df_info
-  column_info = df.dtypes.to_dict()  # Column names and types
-  summary_stats = df.describe().to_string()  # Summary statistics
-  outlier_percentages
-  corr_mat
-  cluster_image = plt.imread('clusters_2d.png')
-  prompt = f"""
-  Generate a README.md file that summarizes the data {df.head()}
-  """
-  # Send the prompt to the LLM (using your preferred method, e.g., get_LLMResponse)
-  response = get_LLMResponse(prompt)
-  if response:
     try:
-        response_json = response.json()
-        generate_report(df, numeric_columns, file_path, response_json)
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
-else:
-    print(f"Request failed with status code: {response.status_code}")
+        # Load the dataset
+        df = load_data(dataset)
+
+        # Perform analysis
+        summary = generic_analysis(df)
+        print("Generic analysis completed.")
+        
+        df = preprocess_data(df)
+
+        # Advanced Analysis
+        advanced_analyses = advanced_analysis(df)
+        print("Advanced analysis completed.")
+
+        # Detect feature types
+        feature_types = detect_feature_types(df)
+
+        # Perform special analyses
+        special_analyses = perform_special_analyses(df, feature_types)
+
+        # Multi-step insights using agentic workflow
+        insights = agentic_workflow(summary, feature_types)
+        print("LLM insights retrieved.")
+
+        # Create visualizations
+        charts = create_visualizations(df)
+        print("Visualizations created.")
+
+        # Narrate the story
+        story = narrate_story(summary, insights, advanced_analyses, charts, special_analyses)
+        print("Narrative created.")
+
+        # Save README.md
+        save_readme(story, charts)
+        print("README.md generated.")
+    except Exception as e:
+        print("Error:", e)
