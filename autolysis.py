@@ -50,9 +50,9 @@ for package, submodules in required_packages:
 
 # Validate and retrieve the AI Proxy Token
 try:
-    AI_PROXY_TOKEN = os.environ["AIPROXY_TOKEN"]
+    AI_PROXY = os.environ["AIPROXY"]
 except KeyError:
-    print("Error: AIPROXY_TOKEN environment variable is not set.")
+    print("Error: AIPROXY environment variable is not set.")
     sys.exit(1)
 
 # Validate command-line arguments
@@ -210,7 +210,7 @@ def generate_story(analysis_summary, charts):
       4. Conclusion
     """
     headers = {
-        "Authorization": f"Bearer {AI_PROXY_TOKEN}",
+        "Authorization": f"Bearer {AI_PROXY}",
         "Content-Type": "application/json"
     }
     data = {
