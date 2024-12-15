@@ -390,7 +390,7 @@ def generate_story(summary: Dict, visualizations: List[str]) -> str:
     headers = {"Authorization": f"Bearer {AI_PROXY_TOKEN}", "Content-Type": "application/json"}
     response = requests.post(
         "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}],"temperature": 0.0, "top_p": 1.0 "max_tokens": 1500},
+        json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}],"temperature": 0.0, "top_p": 1.0, "max_tokens": 1500},
         headers=headers,
     )
     if response.status_code == 200:
