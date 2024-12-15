@@ -85,7 +85,7 @@ warnings.filterwarnings("ignore")
 
 # === AI Proxy Token Validation ===
 try:
-    AI_PROXY_TOKEN = os.environ["AI_PROXY"]
+    AI_PROXY_TOKEN = os.environ("AI_PROXY")
 except KeyError:
     print("Error: AI_PROXY environment variable is not set.")
     sys.exit(1)
