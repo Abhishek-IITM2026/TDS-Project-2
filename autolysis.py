@@ -50,7 +50,7 @@ for package, submodules in required_packages:
 
 # Validate and retrieve the AI Proxy Token
 try:
-    AI_PROXY = os.environ["AIPROXY"]
+    AI_PROXY = os.environ["AI_PROXY"]
 except KeyError:
     print("Error: AIPROXY environment variable is not set.")
     sys.exit(1)
